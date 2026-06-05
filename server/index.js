@@ -559,7 +559,12 @@ app.post("/api/events", requireRole(["admin", "photographer"]), async (req, res)
 
 app.get("/api/media", optionalAuth, async (req, res) => {
   let media = [];
+  let privateEventIds = new Set();
+
   if (isSupabaseEnabled && supabase) {
+    const { data: pvEvts } = await supabase.from("events").select("id").eq("access", "private");
+    if (pvEvts) pvEvts.forEach(e => privateEventIds.add(e.id));
+
     let query = supabase.from("media").select("*, comments(*)");
     if (req.query.eventId) {
       query = query.eq("event_id", req.query.eventId);
@@ -593,6 +598,9 @@ app.get("/api/media", optionalAuth, async (req, res) => {
     }));
   } else {
     const data = await readData();
+    const evts = data.events || [];
+    evts.filter(e => e.access === "private").forEach(e => privateEventIds.add(e.id));
+
     media = data.media || [];
     if (req.query.eventId) {
       media = media.filter((item) => item.eventId === req.query.eventId.toString());
@@ -600,8 +608,10 @@ app.get("/api/media", optionalAuth, async (req, res) => {
   }
 
   const role = req.user?.role || "viewer";
-  if (role === "viewer") {
-    media = media.filter((item) => item.access === "public");
+  const isAuthorized = ["admin", "photographer", "member"].includes(role);
+
+  if (!isAuthorized) {
+    media = media.filter((item) => item.access === "public" && !privateEventIds.has(item.eventId));
   }
 
   if (req.query.search) {
@@ -777,9 +787,13 @@ app.delete("/api/media/:id", requireRole(["admin", "photographer"]), async (req,
 app.get("/api/search", optionalAuth, async (req, res) => {
   const query = req.query.query?.toString().trim().toLowerCase() || "";
   const role = req.user?.role || "viewer";
+  const isAuthorized = ["admin", "photographer", "member"].includes(role);
+  let privateEventIds = new Set();
 
   if (isSupabaseEnabled && supabase) {
-    // Basic similarity filters for demonstration, matching Title or Tags or Uploader
+    const { data: pvEvts } = await supabase.from("events").select("id").eq("access", "private");
+    if (pvEvts) pvEvts.forEach(e => privateEventIds.add(e.id));
+
     let mediaQuery = supabase.from("media").select("*, comments(*)");
     let eventQuery = supabase.from("events").select("*");
     
@@ -789,9 +803,9 @@ app.get("/api/search", optionalAuth, async (req, res) => {
     let events = dbEvents || [];
     let media = dbMedia || [];
 
-    if (role === "viewer") {
+    if (!isAuthorized) {
       events = events.filter((e) => e.access === "public");
-      media = media.filter((m) => m.access === "public");
+      media = media.filter((m) => m.access === "public" && !privateEventIds.has(m.event_id));
     }
 
     if (query) {
@@ -837,12 +851,15 @@ app.get("/api/search", optionalAuth, async (req, res) => {
   }
 
   const data = await readData();
+  const evts = data.events || [];
+  evts.filter(e => e.access === "private").forEach(e => privateEventIds.add(e.id));
+
   let events = data.events || [];
   let media = data.media || [];
 
-  if (role === "viewer") {
+  if (!isAuthorized) {
     events = events.filter((event) => event.access === "public");
-    media = media.filter((item) => item.access === "public");
+    media = media.filter((item) => item.access === "public" && !privateEventIds.has(item.eventId));
   }
 
   if (query) {
@@ -1061,7 +1078,21 @@ app.get("/api/media/:id/download", optionalAuth, async (req, res) => {
     return res.status(404).json({ error: "Media item not found." });
   }
 
-  if (item.access === "private" && !["admin", "photographer", "member"].includes(req.user?.role)) {
+  // Get event access
+  let isEventPrivate = false;
+  if (isSupabaseEnabled && supabase) {
+    const { data: evt } = await supabase.from("events").select("access").eq("id", item.eventId).single();
+    if (evt && evt.access === "private") isEventPrivate = true;
+  } else {
+    const data = await readData();
+    const evt = data.events.find(e => e.id === item.eventId);
+    if (evt && evt.access === "private") isEventPrivate = true;
+  }
+
+  const isPrivate = item.access === "private" || isEventPrivate;
+  const isAuthorized = ["admin", "photographer", "member"].includes(req.user?.role);
+
+  if (isPrivate && !isAuthorized) {
     return res.status(403).json({ error: "Access denied." });
   }
 
