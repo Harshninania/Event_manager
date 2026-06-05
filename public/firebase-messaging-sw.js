@@ -2,14 +2,14 @@
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// Initialize the Firebase app in the service worker by passing in the messagingSenderId.
 firebase.initializeApp({
-  apiKey: "FCM_API_KEY",
-  authDomain: "FCM_PROJECT_ID.firebaseapp.com",
-  projectId: "FCM_PROJECT_ID",
-  storageBucket: "FCM_PROJECT_ID.appspot.com",
-  messagingSenderId: "MESSAGING_SENDER_ID",
-  appId: "APP_ID"
+  apiKey: "AIzaSyB97tXjS94idnkPXkdd4rBb2WC7Rg0sDgY",
+  authDomain: "event-management-website-3c294.firebaseapp.com",
+  projectId: "event-management-website-3c294",
+  storageBucket: "event-management-website-3c294.firebasestorage.app",
+  messagingSenderId: "662300060747",
+  appId: "1:662300060747:web:512673ecfb0f23990d31ce",
+  measurementId: "G-Q94THGHNEH"
 });
 
 const messaging = firebase.messaging();
