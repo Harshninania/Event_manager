@@ -391,10 +391,20 @@ const createNotification = async (data, recipient, message, link = "", type = "g
 // Helper mock to lookup user FCM tokens
 const getFCMToken = async (username) => {
   if (isSupabaseEnabled && supabase) {
-    const { data } = await supabase.from("user_tokens").select("fcm_token").eq("username", username).single();
-    return data?.fcm_token;
+    try {
+      const { data } = await supabase.from("user_tokens").select("fcm_token").eq("username", username).single();
+      return data?.fcm_token;
+    } catch (err) {
+      console.warn("FCM token lookup in Supabase failed:", err.message);
+    }
   }
-  return null; // Local mock returns null
+  try {
+    const data = await readData();
+    return data.userTokens?.[username] || null;
+  } catch (err) {
+    console.warn("Local FCM token lookup failed:", err.message);
+  }
+  return null;
 };
 
 const runFaceMatchPython = (selfieFilePath) => {
@@ -952,6 +962,38 @@ app.get("/api/notifications", optionalAuth, async (req, res) => {
   }
   const filtered = notifications.filter((note) => note.recipient === "all" || note.recipient === req.user.name);
   res.json({ notifications: filtered });
+});
+
+app.post("/api/notifications/register-token", requireAuth, async (req, res) => {
+  const { token } = req.body;
+  const username = req.user.name;
+  if (!token) {
+    return res.status(400).json({ error: "Token is required." });
+  }
+
+  if (isSupabaseEnabled && supabase) {
+    try {
+      const { error } = await supabase
+        .from("user_tokens")
+        .upsert({ username, fcm_token: token }, { onConflict: "username" });
+      if (error) throw error;
+    } catch (err) {
+      console.error("Failed to upsert token in Supabase:", err.message);
+      return res.status(500).json({ error: "Failed to store token in database." });
+    }
+  } else {
+    try {
+      const data = await readData();
+      data.userTokens = data.userTokens || {};
+      data.userTokens[username] = token;
+      await writeData(data);
+    } catch (err) {
+      console.error("Failed to store token locally:", err.message);
+      return res.status(500).json({ error: "Failed to store token locally." });
+    }
+  }
+
+  res.json({ success: true });
 });
 
 app.post("/api/media/:id/share", requireAuth, async (req, res) => {
