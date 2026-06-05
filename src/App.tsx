@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import axios from "axios";
 import {
@@ -22,6 +22,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+
+// Clerk Auth SDK
+import { useAuth, useUser, SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
+
+// Supabase Database SDK
+import { createClient } from "@supabase/supabase-js";
+
+// Client-Side Face Recognition
+import { loadFaceModels, extractFaceDescriptor, compareFaces } from "./lib/face-recognition";
 
 type Role = "admin" | "photographer" | "member" | "viewer";
 
@@ -83,6 +92,14 @@ const defaultEventForm = {
   club: "Snapshare Club",
 };
 
+// Detect environment capabilities
+const isClerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const isSupabaseEnabled = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+const supabase = isSupabaseEnabled
+  ? createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
+  : null;
+
 export default function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -117,14 +134,127 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const isViewer = user.role === "viewer";
   const canUpload = user.role !== "viewer";
   const canCreateEvent = ["admin", "photographer"].includes(user.role);
   const canDeleteMedia = ["admin", "photographer"].includes(user.role);
 
+  // Clerk Auth Integration
+  const clerk = isClerkEnabled ? useUser() : null;
+  const clerkAuth = isClerkEnabled ? useAuth() : null;
+
   useEffect(() => {
     fetchEvents("date");
-    loginAs("viewer");
+    if (!isClerkEnabled) {
+      loginAs("viewer");
+    }
+  }, []);
+
+  // Sync Clerk Session with App State
+  useEffect(() => {
+    const syncClerkSession = async () => {
+      if (isClerkEnabled && clerkAuth?.isSignedIn && clerk?.user) {
+        try {
+          const t = await clerkAuth.getToken();
+          setToken(t);
+          
+          // Determine user role from Clerk metadata
+          const role = (clerk.user.publicMetadata?.role as Role) || "member";
+          setUser({
+            id: clerk.user.id,
+            name: clerk.user.firstName ? `${clerk.user.firstName} ${clerk.user.lastName || ""}`.trim() : clerk.user.username || "User",
+            role: role,
+            avatar: clerk.user.imageUrl || "https://images.unsplash.com/photo-1544005313-94ddf0286df2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=200",
+          });
+        } catch (err) {
+          console.error("Clerk session sync failed:", err);
+        }
+      } else if (isClerkEnabled && !clerkAuth?.isSignedIn) {
+        setUser({
+          id: "guest",
+          name: "Visitor",
+          role: "viewer",
+          avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=200",
+        });
+        setToken(null);
+      }
+    };
+    syncClerkSession();
+  }, [clerkAuth?.isSignedIn, clerk?.user]);
+
+  // Configure Axios default headers dynamically
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    } else {
+      delete axios.defaults.headers.common["Authorization"];
+    }
+  }, [token]);
+
+  // Supabase Realtime Subscription Integration
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Listen for likes, tags and other edits on the media table
+    const mediaChannel = supabase
+      .channel("supabase-media")
+      .on("postgres_changes", { event: "*", schema: "public", table: "media" }, (payload) => {
+        const updatedItem = payload.new as any;
+        const mappedUpdate = {
+          likes: updatedItem.likes,
+          favorites: updatedItem.favorites,
+          shares: updatedItem.shares,
+          taggedUsers: updatedItem.tagged_users || []
+        };
+
+        setMedia((current) =>
+          current.map((item) =>
+            item.id === updatedItem.id ? { ...item, ...mappedUpdate } : item
+          )
+        );
+
+        setAllMedia((current) =>
+          current.map((item) =>
+            item.id === updatedItem.id ? { ...item, ...mappedUpdate } : item
+          )
+        );
+      })
+      .subscribe();
+
+    // Listen for new comments
+    const commentsChannel = supabase
+      .channel("supabase-comments")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "comments" }, (payload) => {
+        const newComment = payload.new as any;
+        const commentItem = {
+          id: newComment.id,
+          author: newComment.author,
+          text: newComment.text,
+          createdAt: newComment.created_at,
+          mentions: newComment.mentions || []
+        };
+
+        setMedia((current) =>
+          current.map((item) => {
+            if (item.id === newComment.media_id) {
+              const alreadyExists = item.comments?.some(c => c.id === commentItem.id);
+              if (alreadyExists) return item;
+              return {
+                ...item,
+                comments: [commentItem, ...(item.comments || [])]
+              };
+            }
+            return item;
+          })
+        );
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(mediaChannel);
+      supabase.removeChannel(commentsChannel);
+    };
   }, []);
 
   useEffect(() => {
@@ -554,19 +684,53 @@ export default function App() {
     }
 
     setIsFaceSearching(true);
-    const formData = new FormData();
-    formData.append("selfie", files[0]);
+    setMessage("Loading Face Recognition neural network...");
 
     try {
-      const response = await axios.post("/api/face-match", formData, {
-        headers: {
-          ...authHeaders(),
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      setFaceMatches(response.data.matches || []);
-    } catch {
-      setMessage("Face search failed.");
+      // Load face-api models
+      await loadFaceModels();
+      setMessage("Extracting face features from selfie...");
+
+      const selfieFile = files[0];
+      const selfieUrl = URL.createObjectURL(selfieFile);
+      const selfieDescriptor = await extractFaceDescriptor(selfieUrl);
+
+      if (!selfieDescriptor) {
+        setMessage("Unable to detect a face in your selfie. Please try a clearer picture.");
+        setIsFaceSearching(false);
+        return;
+      }
+
+      setMessage("Scanning album photos. This runs fully in your browser...");
+      const currentMediaList = selectedEvent ? media : allMedia;
+      const matchedItems: MediaItem[] = [];
+
+      for (const item of currentMediaList) {
+        if (!item.isImage) continue;
+        try {
+          const itemDescriptor = await extractFaceDescriptor(item.url);
+          if (itemDescriptor) {
+            const distance = compareFaces(selfieDescriptor, itemDescriptor);
+            console.log(`Euclidean distance for ${item.title}: ${distance}`);
+            // Distance < 0.6 is a positive match
+            if (distance < 0.6) {
+              matchedItems.push(item);
+            }
+          }
+        } catch (err) {
+          console.warn(`Could not analyze face for ${item.title}:`, err);
+        }
+      }
+
+      setFaceMatches(matchedItems);
+      if (matchedItems.length === 0) {
+        setMessage("No matching photos found in this album.");
+      } else {
+        setMessage(`Matched ${matchedItems.length} photo(s)!`);
+      }
+    } catch (error) {
+      console.error("Browser face recognition error:", error);
+      setMessage("Face recognition search failed.");
     } finally {
       setIsFaceSearching(false);
     }
@@ -836,11 +1000,11 @@ export default function App() {
             <p className="text-xs uppercase tracking-[0.24em] text-neutral-500 mb-3">Menu</p>
             <div className="space-y-2">
               {[
-                { label: "Events", icon: Calendar, view: "events" },
-                { label: "Albums", icon: Image, view: "albums" },
-                { label: "Upload", icon: Upload, view: "upload" },
-                { label: "Discover", icon: Compass, view: "discover" },
-                { label: "Settings", icon: Settings, view: "settings" },
+                { label: "Events", icon: Calendar, view: "events" as const },
+                { label: "Albums", icon: Image, view: "albums" as const },
+                { label: "Upload", icon: Upload, view: "upload" as const },
+                { label: "Discover", icon: Compass, view: "discover" as const },
+                { label: "Settings", icon: Settings, view: "settings" as const },
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = activeView === item.view;
@@ -873,46 +1037,67 @@ export default function App() {
 
           <div className="rounded-3xl bg-white border border-neutral-200 p-4">
             <p className="text-xs uppercase tracking-[0.24em] text-neutral-500 mb-3">Sign in</p>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-neutral-700" htmlFor="username">
-                  Username
-                </label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="admin"
-                  className="mt-2 w-full"
-                />
+            {isClerkEnabled ? (
+              <div className="space-y-4">
+                <SignedIn>
+                  <div className="flex flex-col items-center gap-3 py-3">
+                    <UserButton afterSignOutUrl="/" showName />
+                    <p className="text-xs text-neutral-500">Authenticated via Clerk</p>
+                  </div>
+                </SignedIn>
+                <SignedOut>
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-xs text-neutral-500 text-center">Use the Clerk widget below to sign into your account.</p>
+                    <SignInButton mode="modal">
+                      <Button className="w-full">Sign In with Clerk</Button>
+                    </SignInButton>
+                  </div>
+                </SignedOut>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-neutral-700" htmlFor="password">
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="••••••••"
-                  className="mt-2 w-full"
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoggingIn}>
-                {isLoggingIn ? "Signing in..." : "Sign in"}
-              </Button>
-            </form>
-            <div className="mt-4 rounded-2xl bg-neutral-100 px-4 py-3 text-sm text-neutral-600">
-              <p className="font-semibold text-neutral-900">Demo accounts</p>
-              <p>admin / admin123</p>
-              <p>photographer / photographer123</p>
-              <p>member / member123</p>
-            </div>
-            {token && (
-              <Button onClick={handleLogout} variant="outline" className="mt-4 w-full">
-                Logout
-              </Button>
+            ) : (
+              <>
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-neutral-700" htmlFor="username">
+                      Username
+                    </label>
+                    <Input
+                      id="username"
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
+                      placeholder="admin"
+                      className="mt-2 w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-neutral-700" htmlFor="password">
+                      Password
+                    </label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="••••••••"
+                      className="mt-2 w-full"
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isLoggingIn}>
+                    {isLoggingIn ? "Signing in..." : "Sign in"}
+                  </Button>
+                </form>
+                <div className="mt-4 rounded-2xl bg-neutral-100 px-4 py-3 text-sm text-neutral-600">
+                  <p className="font-semibold text-neutral-900">Demo accounts</p>
+                  <p>admin / admin123</p>
+                  <p>photographer / photographer123</p>
+                  <p>member / member123</p>
+                </div>
+                {token && (
+                  <Button onClick={handleLogout} variant="outline" className="mt-4 w-full">
+                    Logout
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </aside>
