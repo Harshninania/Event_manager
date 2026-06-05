@@ -200,10 +200,15 @@ const optionalAuth = async (req, res, next) => {
     try {
       const decoded = await clerkClient.verifyToken(token);
       const user = await clerkClient.users.getUser(decoded.sub);
+      const emails = user.emailAddresses ? user.emailAddresses.map(e => e.emailAddress) : [];
+      let role = user.publicMetadata?.role || "member";
+      if (emails.includes("harshninania2006@gmail.com")) {
+        role = "admin";
+      }
       req.user = {
         id: user.id,
         name: user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : user.username || "User",
-        role: user.publicMetadata.role || "member",
+        role: role,
         avatar: user.imageUrl || ""
       };
     } catch {
@@ -232,10 +237,15 @@ const requireAuth = async (req, res, next) => {
     try {
       const decoded = await clerkClient.verifyToken(token);
       const user = await clerkClient.users.getUser(decoded.sub);
+      const emails = user.emailAddresses ? user.emailAddresses.map(e => e.emailAddress) : [];
+      let role = user.publicMetadata?.role || "member";
+      if (emails.includes("harshninania2006@gmail.com")) {
+        role = "admin";
+      }
       req.user = {
         id: user.id,
         name: user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : user.username || "User",
-        role: user.publicMetadata.role || "member",
+        role: role,
         avatar: user.imageUrl || ""
       };
       return next();
