@@ -254,6 +254,39 @@ body {
 .border-l {
   border-color: var(--color-border);
 }
-.border-r {
-  border-color: var(--color-border);
+
+@keyframes scaleUpHeart {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.2);
+    opacity: 0.9;
+  }
+  30% {
+    transform: scale(0.9);
+    opacity: 0.9;
+  }
+  80% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.scale-up-heart {
+  animation: scaleUpHeart 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
 }
