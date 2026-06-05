@@ -92,6 +92,349 @@ const defaultEventForm = {
   club: "Snapshare Club",
 };
 
+// ----------------------------------------------------
+// INSTAGRAM POST CARD COMPONENT
+// ----------------------------------------------------
+function InstagramCard({
+  item,
+  user,
+  authHeaders,
+  onLike,
+  onFavorite,
+  onShare,
+  onDelete,
+  canDelete,
+}: {
+  item: MediaItem;
+  user: User;
+  authHeaders: () => any;
+  onLike: (item: MediaItem) => void;
+  onFavorite: (item: MediaItem) => void;
+  onShare: (item: MediaItem) => void;
+  onDelete?: (item: MediaItem) => void;
+  canDelete?: boolean;
+}) {
+  const [commentText, setCommentText] = useState("");
+  const [tagText, setTagText] = useState("");
+  const [showAllComments, setShowAllComments] = useState(false);
+  const [heartAnim, setHeartAnim] = useState(false);
+  const [comments, setComments] = useState(item.comments || []);
+  const [likes, setLikes] = useState(item.likes || 0);
+  const [shares, setShares] = useState(item.shares || 0);
+  const [favorites, setFavorites] = useState(item.favorites || 0);
+  const [taggedUsers, setTaggedUsers] = useState(item.taggedUsers || []);
+
+  useEffect(() => {
+    setComments(item.comments || []);
+  }, [item.comments]);
+  useEffect(() => {
+    setLikes(item.likes);
+  }, [item.likes]);
+  useEffect(() => {
+    setFavorites(item.favorites);
+  }, [item.favorites]);
+  useEffect(() => {
+    setShares(item.shares || 0);
+  }, [item.shares]);
+  useEffect(() => {
+    setTaggedUsers(item.taggedUsers || []);
+  }, [item.taggedUsers]);
+
+  const handleDoubleTap = () => {
+    setHeartAnim(true);
+    setTimeout(() => setHeartAnim(false), 800);
+    handleLocalLike();
+  };
+
+  const handleLocalLike = async () => {
+    try {
+      setLikes((l) => l + 1);
+      await onLike(item);
+    } catch (err) {
+      setLikes((l) => l - 1);
+    }
+  };
+
+  const handleLocalFavorite = async () => {
+    try {
+      setFavorites((f) => f + 1);
+      await onFavorite(item);
+    } catch (err) {
+      setFavorites((f) => f - 1);
+    }
+  };
+
+  const handleLocalComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+    const text = commentText.trim();
+    setCommentText("");
+
+    try {
+      const response = await axios.post(
+        `/api/media/${item.id}/comment`,
+        { text },
+        { headers: authHeaders() }
+      );
+      
+      const newComment = {
+        id: response.data.comment.id,
+        author: user.name,
+        text: text,
+        createdAt: response.data.comment.createdAt,
+        mentions: response.data.comment.mentions
+      };
+      
+      setComments((prev) => [newComment, ...prev]);
+    } catch (err) {
+      console.error("Failed to post comment:", err);
+    }
+  };
+
+  const handleLocalTag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tagText.trim()) return;
+    const name = tagText.trim();
+    setTagText("");
+
+    try {
+      const response = await axios.post(
+        `/api/media/${item.id}/tag`,
+        { taggedUser: name },
+        { headers: authHeaders() }
+      );
+      setTaggedUsers(response.data.taggedUsers);
+    } catch (err) {
+      console.error("Failed to tag user:", err);
+    }
+  };
+
+  const displayedComments = showAllComments ? comments : comments.slice(0, 2);
+
+  return (
+    <Card className="mx-auto w-full max-w-[480px] overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-sm transition-all hover:shadow-md">
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-9 w-9 border border-neutral-200">
+            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.uploader)}`} alt={item.uploader} />
+            <AvatarFallback>{item.uploader.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="text-sm font-semibold text-neutral-900 leading-tight">{item.uploader}</p>
+            <p className="text-[11px] text-neutral-500">
+              {item.access === "private" ? "🔒 Private Album" : "🌍 Public Album"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {canDelete && onDelete && (
+            <button
+              onClick={() => onDelete(item)}
+              className="rounded-full p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 transition"
+              title="Delete photo"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+          <Badge variant={item.access === "private" ? "secondary" : "default"} className="text-[10px] py-0 px-2 rounded-full uppercase font-bold tracking-wider">
+            {item.access}
+          </Badge>
+        </div>
+      </div>
+
+      <div
+        className="relative aspect-square w-full overflow-hidden bg-neutral-950 cursor-pointer select-none"
+        onDoubleClick={handleDoubleTap}
+      >
+        {item.mimeType.startsWith("video/") ? (
+          <video controls src={item.url} className="h-full w-full object-cover" />
+        ) : (
+          <img src={item.url} alt={item.title} className="h-full w-full object-cover transition duration-300 hover:scale-[1.02]" />
+        )}
+
+        {heartAnim && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/10 animate-fade-in">
+            <div className="animate-ping absolute h-20 w-20 rounded-full bg-white/20" />
+            <svg
+              className="h-24 w-24 text-red-500 fill-current drop-shadow-lg scale-up-heart"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between px-4 pt-3">
+        <div className="flex items-center gap-4">
+          <button onClick={handleLocalLike} className="group flex items-center transition active:scale-90">
+            <svg
+              className={`h-6 w-6 transition duration-200 group-hover:text-red-500 ${
+                likes > item.likes ? "text-red-500 fill-current" : "text-neutral-800 hover:scale-110"
+              }`}
+              xmlns="http://www.w3.org/2000/svg"
+              fill={likes > item.likes ? "currentColor" : "none"}
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+          </button>
+
+          <button className="group flex items-center transition hover:scale-110 text-neutral-800">
+            <svg
+              className="h-6 w-6 group-hover:text-blue-500"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
+            </svg>
+          </button>
+
+          <button onClick={() => onShare(item)} className="group flex items-center transition hover:scale-110 text-neutral-800">
+            <svg
+              className="h-6 w-6 group-hover:text-emerald-500"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8.684 10.742l4.828-2.414m0 0a3 3 0 10-3.62-1.09l-4.829 2.414m5.273-3.738L13.5 8.25m-2.116 2.116L8.683 13.258m0 0a3 3 0 103.62 1.09l4.829-2.414m-5.273 3.738L13.5 13.25"
+              />
+            </svg>
+            {shares > 0 && <span className="text-xs font-semibold text-neutral-600 ml-1">{shares}</span>}
+          </button>
+        </div>
+
+        <button onClick={handleLocalFavorite} className="group flex items-center transition active:scale-90">
+          <svg
+            className={`h-6 w-6 transition duration-200 group-hover:text-amber-500 ${
+              favorites > item.favorites ? "text-amber-500 fill-current" : "text-neutral-800 hover:scale-110"
+            }`}
+            xmlns="http://www.w3.org/2000/svg"
+            fill={favorites > item.favorites ? "currentColor" : "none"}
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div className="px-4 py-2 space-y-1.5">
+        <p className="text-sm font-bold text-neutral-900">
+          {likes > 0 ? `${likes.toLocaleString()} likes` : "Be the first to like this"}
+        </p>
+
+        <div>
+          <span className="text-sm font-bold text-neutral-900 mr-2">{item.uploader}</span>
+          <span className="text-sm text-neutral-800">{item.title}</span>
+        </div>
+
+        {item.tags && item.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            {item.tags.map((tag) => (
+              <span key={tag} className="text-xs font-semibold text-blue-600 cursor-pointer hover:underline">
+                #{tag.toLowerCase()}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {taggedUsers.length > 0 && (
+          <p className="text-xs text-neutral-500">
+            🏷️ Tagged: <span className="font-semibold">{taggedUsers.join(", ")}</span>
+          </p>
+        )}
+      </div>
+
+      <div className="px-4 pb-2 border-t border-neutral-100/50 pt-2 space-y-2">
+        {comments.length > 2 && (
+          <button
+            onClick={() => setShowAllComments(!showAllComments)}
+            className="text-xs text-neutral-500 hover:text-neutral-700 font-medium transition"
+          >
+            {showAllComments ? "Hide comments" : `View all ${comments.length} comments`}
+          </button>
+        )}
+
+        {displayedComments.length > 0 ? (
+          <div className="space-y-1.5">
+            {displayedComments.map((comment) => (
+              <div key={comment.id} className="text-xs leading-relaxed text-neutral-700">
+                <span className="font-semibold text-neutral-900 mr-2">{comment.author}</span>
+                <span>{comment.text}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-neutral-400 italic">No comments yet. Write something below...</p>
+        )}
+      </div>
+
+      <div className="border-t border-neutral-100 px-4 py-3 bg-neutral-50/50">
+        <form onSubmit={handleLocalComment} className="flex gap-2 items-center">
+          <input
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder="Add a comment..."
+            className="w-full bg-transparent text-xs text-neutral-900 outline-none placeholder-neutral-400 py-1"
+          />
+          <button
+            type="submit"
+            disabled={!commentText.trim()}
+            className={`text-xs font-bold transition ${
+              commentText.trim() ? "text-blue-500 hover:text-blue-700" : "text-blue-300 cursor-default"
+            }`}
+          >
+            Post
+          </button>
+        </form>
+
+        <form onSubmit={handleLocalTag} className="flex gap-2 items-center mt-2 border-t border-neutral-100 pt-2">
+          <input
+            value={tagText}
+            onChange={(e) => setTagText(e.target.value)}
+            placeholder="Tag a user (e.g. member)..."
+            className="w-full bg-transparent text-[11px] text-neutral-700 outline-none placeholder-neutral-400 py-1"
+          />
+          <button
+            type="submit"
+            disabled={!tagText.trim()}
+            className={`text-[11px] font-semibold transition ${
+              tagText.trim() ? "text-neutral-700 hover:text-neutral-900" : "text-neutral-400 cursor-default"
+            }`}
+          >
+            Tag
+          </button>
+        </form>
+      </div>
+    </Card>
+  );
+}
+
 // Detect environment capabilities
 const isClerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const isSupabaseEnabled = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
@@ -1250,92 +1593,19 @@ export default function App() {
                 </div>
               </div>
               {filteredMedia.length > 0 ? (
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {filteredMedia.map((item) => (
-                    <Card key={item.id} className="overflow-hidden">
-                      <div className="relative h-44 overflow-hidden bg-neutral-200">
-                        <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover" />
-                      </div>
-                      <div className="space-y-3 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <h4 className="font-semibold">{item.title}</h4>
-                            <p className="text-neutral-500 text-sm">Uploaded by {item.uploader}</p>
-                          </div>
-                          <Badge variant="secondary">{item.access}</Badge>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {item.tags.slice(0, 3).map((tag) => (
-                            <span key={tag} className="rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-600">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-neutral-500">
-                            <button onClick={() => handleLike(item)} className="hover:text-neutral-900">Like {item.likes}</button>
-                            <button onClick={() => handleFavorite(item)} className="hover:text-neutral-900">Fav {item.favorites}</button>
-                            <button onClick={() => handleShare(item)} className="hover:text-neutral-900">Share{item.shares ? ` ${item.shares}` : ""}</button>
-                          </div>
-                          <a href={`/api/media/${item.id}/download?watermark=true`} className="text-sm text-neutral-600 hover:text-neutral-900">
-                            Download
-                          </a>
-                        </div>
-                        {item.taggedUsers && item.taggedUsers.length > 0 && (
-                          <div className="rounded-2xl bg-neutral-100 px-3 py-2 text-xs text-neutral-600">
-                            Tagged: {item.taggedUsers.join(", ")}
-                          </div>
-                        )}
-                        <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-3">
-                          <p className="text-sm font-semibold text-neutral-900">Comments</p>
-                          {item.comments && item.comments.length > 0 ? (
-                            <div className="space-y-2 pt-3">
-                              {item.comments.slice(0, 2).map((comment) => (
-                                <div key={comment.id} className="rounded-2xl bg-white p-3 text-sm text-neutral-700 shadow-sm">
-                                  <p className="font-medium text-neutral-900">{comment.author}</p>
-                                  <p>{comment.text}</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="pt-3 text-sm text-neutral-500">No comments yet.</p>
-                          )}
-                          <div className="mt-3 space-y-3">
-                            <div className="grid gap-2">
-                              <input
-                                value={commentDrafts[item.id] || ""}
-                                onChange={(event) => setCommentDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
-                                placeholder="Add a comment..."
-                                className="h-10 rounded-2xl border border-neutral-200 bg-white px-3 text-sm text-neutral-900"
-                              />
-                              <button
-                                onClick={() => handleComment(item)}
-                                className="rounded-2xl bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-800"
-                              >
-                                Post comment
-                              </button>
-                            </div>
-                            <div className="grid gap-2">
-                              <div className="text-xs text-neutral-500">Tag a friend with a name:</div>
-                              <div className="flex gap-2">
-                                <input
-                                  value={tagDrafts[item.id] || ""}
-                                  onChange={(event) => setTagDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
-                                  placeholder="Type a name and tag"
-                                  className="h-10 flex-1 rounded-2xl border border-neutral-200 bg-white px-3 text-sm text-neutral-900"
-                                />
-                                <button
-                                  onClick={() => handleTagUser(item)}
-                                  className="rounded-2xl bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
-                                >
-                                  Tag
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
+                    <InstagramCard
+                      key={item.id}
+                      item={item}
+                      user={user}
+                      authHeaders={authHeaders}
+                      onLike={handleLike}
+                      onFavorite={handleFavorite}
+                      onShare={handleShare}
+                      onDelete={handleDeleteMedia}
+                      canDelete={canDeleteMedia}
+                    />
                   ))}
                 </div>
               ) : (
@@ -1506,27 +1776,19 @@ export default function App() {
                   Loading media...
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {(searchResults ? searchResults.media : allMedia).slice(0, 9).map((item) => (
-                    <Card key={item.id} className="overflow-hidden">
-                      <div className="relative h-44 overflow-hidden bg-neutral-200">
-                        <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover" />
-                      </div>
-                      <div className="space-y-3 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <h4 className="font-semibold">{item.title}</h4>
-                            <p className="text-neutral-500 text-sm">{item.uploader}</p>
-                          </div>
-                          <Badge variant={item.access === "private" ? "secondary" : "default"}>{item.access}</Badge>
-                        </div>
-                        <p className="text-neutral-500 text-sm">{item.tags.slice(0, 3).join(", ")}</p>
-                        <div className="flex flex-wrap gap-2 text-xs text-neutral-500">
-                          <span>{item.likes} likes</span>
-                          <span>{item.favorites} favorites</span>
-                        </div>
-                      </div>
-                    </Card>
+                    <InstagramCard
+                      key={item.id}
+                      item={item}
+                      user={user}
+                      authHeaders={authHeaders}
+                      onLike={handleLike}
+                      onFavorite={handleFavorite}
+                      onShare={handleShare}
+                      onDelete={handleDeleteMedia}
+                      canDelete={canDeleteMedia}
+                    />
                   ))}
                 </div>
               )}
