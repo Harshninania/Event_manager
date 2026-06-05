@@ -16,6 +16,10 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  Heart,
+  Bookmark,
+  Send,
+  Download,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -1177,159 +1181,193 @@ export default function App() {
       {albumPanelOpen && selectedEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
           <div className="flex h-full w-full max-w-[1240px] flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl md:flex-row">
-            <div className="border-b border-neutral-200 p-5 md:border-b-0 md:border-r md:w-80 md:flex-shrink-0">
+            {/* Left Column: Compact Grid Preview */}
+            <div className="border-b border-neutral-200 p-5 md:border-b-0 md:border-r md:w-80 md:flex-shrink-0 flex flex-col">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Album</p>
-                  <h2 className="text-lg font-semibold">{selectedEvent.name}</h2>
+                  <h2 className="text-lg font-semibold line-clamp-1">{selectedEvent.name}</h2>
                 </div>
-                <button onClick={closeAlbumPanel} className="rounded-full border border-neutral-200 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100">
+                <button onClick={closeAlbumPanel} className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition">
                   Close
                 </button>
               </div>
-              <p className="mt-3 text-sm text-neutral-500">{selectedEvent.description || "Browse the album and interact with photos."}</p>
-              <div className="mt-5 space-y-3 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 170px)" }}>
+              <p className="mt-3 text-xs text-neutral-500 line-clamp-2">{selectedEvent.description || "Browse the album."}</p>
+              
+              <div className="mt-5 grid grid-cols-3 gap-2 overflow-y-auto pr-1 max-h-[calc(100vh-250px)]">
                 {filteredMedia.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-center text-neutral-500">
-                    <p className="font-semibold">No images found</p>
-                    <p className="mt-2 text-sm">This album does not have any media yet.</p>
+                  <div className="col-span-3 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-center text-neutral-400">
+                    <p className="text-xs font-semibold">Empty</p>
                   </div>
                 ) : (
                   filteredMedia.map((item, index) => (
                     <button
                       key={item.id}
                       onClick={() => setActiveMediaIndex(index)}
-                      className={`flex w-full items-center gap-3 rounded-3xl border p-3 text-left transition ${index === activeMediaIndex ? "border-blue-500 bg-blue-50" : "border-neutral-200 bg-white hover:bg-neutral-100"}`}
+                      className={`aspect-square w-full overflow-hidden rounded-xl border-2 transition relative ${
+                        index === activeMediaIndex
+                          ? "border-neutral-900 scale-95 shadow-sm"
+                          : "border-transparent opacity-50 hover:opacity-100"
+                      }`}
                     >
-                      <div className="h-16 w-16 overflow-hidden rounded-3xl bg-neutral-200">
-                        {item.mimeType.startsWith("video/") ? (
-                          <video src={item.thumbnail} className="h-full w-full object-cover" />
-                        ) : (
-                          <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-neutral-900 line-clamp-1">{item.title}</p>
-                        <p className="text-xs text-neutral-500">{item.uploader}</p>
-                      </div>
+                      {item.mimeType.startsWith("video/") ? (
+                        <video src={item.thumbnail} className="h-full w-full object-cover" />
+                      ) : (
+                        <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover" />
+                      )}
                     </button>
                   ))
                 )}
               </div>
             </div>
-            <div className="flex-1 overflow-hidden p-6">
+
+            {/* Right Side: Media Viewer & Detail Feed */}
+            <div className="flex-1 overflow-hidden p-6 flex flex-col">
               {activeMedia ? (
-                <div className="grid h-full gap-6 lg:grid-cols-[1.4fr_0.95fr]">
-                  <div className="rounded-[2rem] bg-neutral-100 p-4">
-                    <div className="h-full overflow-hidden rounded-[1.5rem] bg-black">
-                      {activeMedia.mimeType.startsWith("video/") ? (
-                        <video controls src={activeMedia.url} className="h-full w-full object-cover" />
-                      ) : (
-                        <img src={activeMedia.url} alt={activeMedia.title} className="h-full w-full object-cover" />
-                      )}
-                    </div>
+                <div className="grid h-full gap-6 lg:grid-cols-[1.4fr_0.95fr] overflow-hidden">
+                  {/* Photo Canvas with floating chevrons */}
+                  <div className="relative rounded-2xl bg-neutral-950 overflow-hidden flex items-center justify-center group h-[400px] lg:h-full">
+                    {activeMedia.mimeType.startsWith("video/") ? (
+                      <video controls src={activeMedia.url} className="h-full w-full object-contain" />
+                    ) : (
+                      <img src={activeMedia.url} alt={activeMedia.title} className="h-full w-full object-contain" />
+                    )}
+
+                    {/* Floating Overlay Controls */}
+                    <button
+                      onClick={goToPreviousMedia}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-2 text-neutral-800 shadow-md backdrop-blur-sm hover:bg-white transition opacity-0 group-hover:opacity-100"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={goToNextMedia}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-2 text-neutral-800 shadow-md backdrop-blur-sm hover:bg-white transition opacity-0 group-hover:opacity-100"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
                   </div>
-                  <div className="flex flex-col gap-5 overflow-y-auto">
-                    <div className="space-y-3">
+
+                  {/* Comments and Details Scroll Panel */}
+                  <div className="flex flex-col h-full overflow-hidden justify-between pr-1">
+                    <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-320px)] flex-1 pr-1">
+                      {/* Post Header */}
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <h3 className="text-2xl font-semibold">{activeMedia.title}</h3>
-                          <p className="text-sm text-neutral-500">Uploaded by {activeMedia.uploader}</p>
+                          <h3 className="text-xl font-bold text-neutral-950">{activeMedia.title}</h3>
+                          <p className="text-xs text-neutral-500">Uploaded by <span className="font-semibold text-neutral-800">{activeMedia.uploader}</span></p>
                         </div>
                         <Badge variant={activeMedia.access === "private" ? "secondary" : "default"}>{activeMedia.access}</Badge>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+
+                      {/* Badges */}
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {activeMedia.tags.map((tag) => (
-                          <span key={tag} className="rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-600">
-                            {tag}
+                          <span key={tag} className="text-xs font-medium text-blue-600">
+                            #{tag.toLowerCase()}
                           </span>
                         ))}
                       </div>
-                      <div className="flex flex-wrap items-center gap-3 text-sm text-neutral-600">
-                        <span>{activeMedia.likes} Likes</span>
-                        <span>{activeMedia.favorites} Favorites</span>
-                        <span>{activeMedia.shares || 0} Shares</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                      <button onClick={goToPreviousMedia} className="rounded-3xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-900 hover:bg-neutral-100">
-                        <ChevronLeft className="mr-2 h-4 w-4" />
-                        Previous
-                      </button>
-                      <button onClick={goToNextMedia} className="rounded-3xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-900 hover:bg-neutral-100">
-                        Next
-                        <ChevronRight className="ml-2 h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleLike(activeMedia)} className="rounded-3xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white hover:bg-neutral-800">
-                        Like
-                      </button>
-                      <button onClick={() => handleFavorite(activeMedia)} className="rounded-3xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900 hover:bg-neutral-100">
-                        Favorite
-                      </button>
-                      <button onClick={() => handleShare(activeMedia)} className="rounded-3xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900 hover:bg-neutral-100">
-                        Share
-                      </button>
-                      <a href={`/api/media/${activeMedia.id}/download?watermark=true`} className="rounded-3xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900 hover:bg-neutral-100">
-                        Download
-                      </a>
-                      {canDeleteMedia && (
-                        <button onClick={() => handleDeleteMedia(activeMedia)} className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete photo
+
+                      {/* Icons Action Row */}
+                      <div className="flex items-center gap-5 py-2.5 border-y border-neutral-100 text-neutral-600">
+                        <button onClick={() => handleLike(activeMedia)} className="flex items-center gap-1.5 hover:text-red-500 transition active:scale-95">
+                          <Heart className={`h-5 w-5 ${activeMedia.likes > 0 ? "fill-red-500 text-red-500" : ""}`} />
+                          <span className="text-xs font-bold">{activeMedia.likes}</span>
                         </button>
-                      )}
-                    </div>
-                    {activeMedia.taggedUsers && activeMedia.taggedUsers.length > 0 && (
-                      <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
-                        Tagged: {activeMedia.taggedUsers.join(", ")}
-                      </div>
-                    )}
-                    <div className="rounded-[1.5rem] border border-neutral-200 bg-neutral-50 p-4">
-                      <p className="mb-3 text-sm font-semibold text-neutral-900">Comments</p>
-                      <div className="space-y-3">
-                        {activeMedia.comments && activeMedia.comments.length > 0 ? (
-                          activeMedia.comments.map((comment) => (
-                            <div key={comment.id} className="rounded-3xl bg-white p-4 text-sm text-neutral-700 shadow-sm">
-                              <p className="font-semibold text-neutral-900">{comment.author}</p>
-                              <p>{comment.text}</p>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-3xl bg-white p-6 text-center text-sm text-neutral-500">
-                            No comments yet.
-                          </div>
+                        <button onClick={() => handleFavorite(activeMedia)} className="flex items-center gap-1.5 hover:text-amber-500 transition active:scale-95">
+                          <Bookmark className={`h-5 w-5 ${activeMedia.favorites > 0 ? "fill-amber-500 text-amber-500" : ""}`} />
+                          <span className="text-xs font-bold">{activeMedia.favorites}</span>
+                        </button>
+                        <button onClick={() => handleShare(activeMedia)} className="flex items-center gap-1.5 hover:text-emerald-500 transition active:scale-95">
+                          <Send className="h-5 w-5" />
+                          <span className="text-xs font-bold">{activeMedia.shares || 0}</span>
+                        </button>
+                        <a href={`/api/media/${activeMedia.id}/download?watermark=true`} className="flex items-center gap-1.5 hover:text-neutral-900 transition">
+                          <Download className="h-5 w-5" />
+                          <span className="text-xs font-bold">Save</span>
+                        </a>
+
+                        {canDeleteMedia && (
+                          <button onClick={() => handleDeleteMedia(activeMedia)} className="ml-auto flex items-center gap-1 text-red-500 hover:text-red-700 transition">
+                            <Trash2 className="h-4 w-4" />
+                            <span className="text-xs font-bold">Delete</span>
+                          </button>
                         )}
                       </div>
-                      <div className="mt-4 space-y-3">
+
+                      {activeMedia.taggedUsers && activeMedia.taggedUsers.length > 0 && (
+                        <div className="text-xs text-neutral-500">
+                          🏷️ Tagged: <span className="font-semibold text-neutral-700">{activeMedia.taggedUsers.join(", ")}</span>
+                        </div>
+                      )}
+
+                      {/* Comments Feed */}
+                      <div className="space-y-3 pt-2">
+                        <p className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Comments</p>
+                        {activeMedia.comments && activeMedia.comments.length > 0 ? (
+                          <div className="space-y-3">
+                            {activeMedia.comments.map((comment) => (
+                              <div key={comment.id} className="text-xs bg-neutral-50 rounded-2xl p-3 border border-neutral-100">
+                                <p className="font-bold text-neutral-900 mb-0.5">{comment.author}</p>
+                                <p className="text-neutral-700">{comment.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-neutral-400 italic">No comments yet. Write a comment below to start the conversation.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Unified Pill-shape Comment Input */}
+                    <div className="space-y-2.5 pt-4 border-t border-neutral-100 bg-white">
+                      <div className="relative flex items-center">
                         <input
                           value={commentDrafts[activeMedia.id] || ""}
                           onChange={(event) => setCommentDrafts((current) => ({ ...current, [activeMedia.id]: event.target.value }))}
                           placeholder="Write a comment..."
-                          className="w-full rounded-3xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900"
+                          className="w-full rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2.5 pr-16 text-xs text-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleComment(activeMedia);
+                            }
+                          }}
                         />
-                        <button onClick={() => handleComment(activeMedia)} className="w-full rounded-3xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white hover:bg-neutral-800">
-                          Post comment
+                        <button
+                          onClick={() => handleComment(activeMedia)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full bg-neutral-950 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-neutral-800 transition"
+                        >
+                          Send
                         </button>
-                        <div className="grid gap-2">
-                          <input
-                            value={tagDrafts[activeMedia.id] || ""}
-                            onChange={(event) => setTagDrafts((current) => ({ ...current, [activeMedia.id]: event.target.value }))}
-                            placeholder="Tag someone with @name"
-                            className="w-full rounded-3xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900"
-                          />
-                          <button onClick={() => handleTagUser(activeMedia)} className="w-full rounded-3xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">
-                            Tag user
-                          </button>
-                        </div>
+                      </div>
+
+                      <div className="relative flex items-center">
+                        <input
+                          value={tagDrafts[activeMedia.id] || ""}
+                          onChange={(event) => setTagDrafts((current) => ({ ...current, [activeMedia.id]: event.target.value }))}
+                          placeholder="Tag someone in this photo..."
+                          className="w-full rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2.5 pr-16 text-xs text-neutral-800 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleTagUser(activeMedia);
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => handleTagUser(activeMedia)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full bg-blue-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-blue-700 transition"
+                        >
+                          Tag
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex h-full items-center justify-center rounded-[2rem] bg-neutral-100 p-6 text-center text-neutral-500">
+                <div className="flex h-full items-center justify-center rounded-[2rem] bg-neutral-50 p-6 text-center text-neutral-400">
                   <div>
-                    <p className="text-xl font-semibold">No images found</p>
-                    <p className="mt-3 text-sm">This album is empty, add media to get started.</p>
+                    <p className="text-lg font-semibold">No media selected</p>
                   </div>
                 </div>
               )}
