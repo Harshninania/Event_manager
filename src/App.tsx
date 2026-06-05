@@ -36,6 +36,10 @@ import { createClient } from "@supabase/supabase-js";
 // Client-Side Face Recognition
 import { loadFaceModels, extractFaceDescriptor, compareFaces } from "./lib/face-recognition";
 
+// Firebase App and Cloud Messaging SDKs
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
+
 type Role = "admin" | "photographer" | "member" | "viewer";
 
 type EventItem = {
@@ -145,12 +149,14 @@ function InstagramCard({
   }, [item.taggedUsers]);
 
   const handleDoubleTap = () => {
+    if (user.role === "viewer") return;
     setHeartAnim(true);
     setTimeout(() => setHeartAnim(false), 800);
     handleLocalLike();
   };
 
   const handleLocalLike = async () => {
+    if (user.role === "viewer") return;
     try {
       setLikes((l) => l + 1);
       await onLike(item);
@@ -160,6 +166,7 @@ function InstagramCard({
   };
 
   const handleLocalFavorite = async () => {
+    if (user.role === "viewer") return;
     try {
       setFavorites((f) => f + 1);
       await onFavorite(item);
@@ -272,10 +279,17 @@ function InstagramCard({
 
       <div className="flex items-center justify-between px-4 pt-3">
         <div className="flex items-center gap-4">
-          <button onClick={handleLocalLike} className="group flex items-center transition active:scale-90">
+          <button 
+            onClick={handleLocalLike} 
+            disabled={user.role === "viewer"}
+            className={`group flex items-center transition active:scale-90 ${user.role === "viewer" ? "opacity-40 cursor-not-allowed" : ""}`}
+            title={user.role === "viewer" ? "Log in to like" : "Like photo"}
+          >
             <svg
-              className={`h-6 w-6 transition duration-200 group-hover:text-red-500 ${
-                likes > item.likes ? "text-red-500 fill-current" : "text-neutral-800 hover:scale-110"
+              className={`h-6 w-6 transition duration-200 ${
+                user.role !== "viewer" ? "group-hover:text-red-500 hover:scale-110" : ""
+              } ${
+                likes > item.likes ? "text-red-500 fill-current" : "text-neutral-800"
               }`}
               xmlns="http://www.w3.org/2000/svg"
               fill={likes > item.likes ? "currentColor" : "none"}
@@ -291,7 +305,10 @@ function InstagramCard({
             </svg>
           </button>
 
-          <button className="group flex items-center transition hover:scale-110 text-neutral-800">
+          <button 
+            className="group flex items-center transition hover:scale-110 text-neutral-800"
+            onClick={() => onShare(item)}
+          >
             <svg
               className="h-6 w-6 group-hover:text-blue-500"
               xmlns="http://www.w3.org/2000/svg"
@@ -327,10 +344,17 @@ function InstagramCard({
           </button>
         </div>
 
-        <button onClick={handleLocalFavorite} className="group flex items-center transition active:scale-90">
+        <button 
+          onClick={handleLocalFavorite} 
+          disabled={user.role === "viewer"}
+          className={`group flex items-center transition active:scale-90 ${user.role === "viewer" ? "opacity-40 cursor-not-allowed" : ""}`}
+          title={user.role === "viewer" ? "Log in to favorite" : "Favorite photo"}
+        >
           <svg
-            className={`h-6 w-6 transition duration-200 group-hover:text-amber-500 ${
-              favorites > item.favorites ? "text-amber-500 fill-current" : "text-neutral-800 hover:scale-110"
+            className={`h-6 w-6 transition duration-200 ${
+              user.role !== "viewer" ? "group-hover:text-amber-500 hover:scale-110" : ""
+            } ${
+              favorites > item.favorites ? "text-amber-500 fill-current" : "text-neutral-800"
             }`}
             xmlns="http://www.w3.org/2000/svg"
             fill={favorites > item.favorites ? "currentColor" : "none"}
@@ -398,43 +422,51 @@ function InstagramCard({
         )}
       </div>
 
-      <div className="border-t border-neutral-100 px-4 py-3 bg-neutral-50/50">
-        <form onSubmit={handleLocalComment} className="flex gap-2 items-center">
-          <input
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Add a comment..."
-            className="w-full bg-transparent text-xs text-neutral-900 outline-none placeholder-neutral-400 py-1"
-          />
-          <button
-            type="submit"
-            disabled={!commentText.trim()}
-            className={`text-xs font-bold transition ${
-              commentText.trim() ? "text-blue-500 hover:text-blue-700" : "text-blue-300 cursor-default"
-            }`}
-          >
-            Post
-          </button>
-        </form>
+      {user.role === "viewer" ? (
+        <div className="border-t border-neutral-100 px-4 py-3 bg-neutral-50/50 text-center">
+          <p className="text-xs text-neutral-500 font-medium">
+            🔒 Sign in to comment or tag users
+          </p>
+        </div>
+      ) : (
+        <div className="border-t border-neutral-100 px-4 py-3 bg-neutral-50/50">
+          <form onSubmit={handleLocalComment} className="flex gap-2 items-center">
+            <input
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Add a comment..."
+              className="w-full bg-transparent text-xs text-neutral-900 outline-none placeholder-neutral-400 py-1"
+            />
+            <button
+              type="submit"
+              disabled={!commentText.trim()}
+              className={`text-xs font-bold transition ${
+                commentText.trim() ? "text-blue-500 hover:text-blue-700" : "text-blue-300 cursor-default"
+              }`}
+            >
+              Post
+            </button>
+          </form>
 
-        <form onSubmit={handleLocalTag} className="flex gap-2 items-center mt-2 border-t border-neutral-100 pt-2">
-          <input
-            value={tagText}
-            onChange={(e) => setTagText(e.target.value)}
-            placeholder="Tag a user (e.g. member)..."
-            className="w-full bg-transparent text-[11px] text-neutral-700 outline-none placeholder-neutral-400 py-1"
-          />
-          <button
-            type="submit"
-            disabled={!tagText.trim()}
-            className={`text-[11px] font-semibold transition ${
-              tagText.trim() ? "text-neutral-700 hover:text-neutral-900" : "text-neutral-400 cursor-default"
-            }`}
-          >
-            Tag
-          </button>
-        </form>
-      </div>
+          <form onSubmit={handleLocalTag} className="flex gap-2 items-center mt-2 border-t border-neutral-100 pt-2">
+            <input
+              value={tagText}
+              onChange={(e) => setTagText(e.target.value)}
+              placeholder="Tag a user (e.g. member)..."
+              className="w-full bg-transparent text-[11px] text-neutral-700 outline-none placeholder-neutral-400 py-1"
+            />
+            <button
+              type="submit"
+              disabled={!tagText.trim()}
+              className={`text-[11px] font-semibold transition ${
+                tagText.trim() ? "text-neutral-700 hover:text-neutral-900" : "text-neutral-400 cursor-default"
+              }`}
+            >
+              Tag
+            </button>
+          </form>
+        </div>
+      )}
     </Card>
   );
 }
@@ -446,6 +478,21 @@ const isSupabaseEnabled = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.en
 const supabase = isSupabaseEnabled
   ? createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
   : null;
+
+// Firebase Configuration and Initialization
+const firebaseConfig = {
+  apiKey: "AIzaSyB97tXjS94idnkPXkdd4rBb2WC7Rg0sDgY",
+  authDomain: "event-management-website-3c294.firebaseapp.com",
+  projectId: "event-management-website-3c294",
+  storageBucket: "event-management-website-3c294.firebasestorage.app",
+  messagingSenderId: "662300060747",
+  appId: "1:662300060747:web:512673ecfb0f23990d31ce",
+  measurementId: "G-Q94THGHNEH"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const messaging = typeof window !== "undefined" ? getMessaging(firebaseApp) : null;
+const FCM_VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || "BGaXQJqwEAlf6Qie0mK_FmReMW0nIny93Scau7K85HHCOilovUbhcOr-ZajkmX4B8NZg-VbjcZ2zrReMA-Wh44Q";
 
 export default function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -506,8 +553,13 @@ export default function App() {
           const t = await clerkAuth.getToken();
           setToken(t);
           
-          // Determine user role from Clerk metadata
-          const role = (clerk.user.publicMetadata?.role as Role) || "member";
+          // Determine user role from Clerk metadata and email matching
+          const emails = clerk.user.emailAddresses ? clerk.user.emailAddresses.map(e => e.emailAddress) : [];
+          let role = (clerk.user.publicMetadata?.role as Role) || "member";
+          if (emails.includes("harshninania2006@gmail.com")) {
+            role = "admin";
+          }
+          
           setUser({
             id: clerk.user.id,
             name: clerk.user.firstName ? `${clerk.user.firstName} ${clerk.user.lastName || ""}`.trim() : clerk.user.username || "User",
@@ -538,6 +590,55 @@ export default function App() {
       delete axios.defaults.headers.common["Authorization"];
     }
   }, [token]);
+
+  // Request Notification permission and retrieve the FCM device token
+  useEffect(() => {
+    const registerFCM = async () => {
+      if (!token || user.role === "viewer" || !messaging) return;
+
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          const currentToken = await getToken(messaging, {
+            vapidKey: FCM_VAPID_KEY,
+          });
+          if (currentToken) {
+            await axios.post("/api/notifications/register-token", 
+              { token: currentToken },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            console.log("FCM Token registered successfully:", currentToken);
+          } else {
+            console.warn("No registration token available.");
+          }
+        } else {
+          console.warn("Notification permission denied.");
+        }
+      } catch (err) {
+        console.error("An error occurred while retrieving FCM token:", err);
+      }
+    };
+
+    registerFCM();
+  }, [token, user.id]);
+
+  // Listen for foreground FCM messages
+  useEffect(() => {
+    if (!messaging) return;
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log("Message received in foreground: ", payload);
+      fetchNotifications();
+      if (payload.notification) {
+        if (Notification.permission === "granted") {
+          new Notification(payload.notification.title || "Snapshare Alert", {
+            body: payload.notification.body,
+            icon: "/logo.png"
+          });
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [messaging, token]);
 
   // Supabase Realtime Subscription Integration
   useEffect(() => {
