@@ -804,6 +804,63 @@ app.delete("/api/media/:id", requireRole(["admin", "photographer"]), async (req,
   res.json({ success: true, id });
 });
 
+app.delete("/api/events/:id", requireRole(["admin"]), async (req, res) => {
+  const { id } = req.params;
+
+  if (isSupabaseEnabled && supabase) {
+    const { data: item } = await supabase.from("events").select("*").eq("id", id).single();
+    if (!item) return res.status(404).json({ error: "Album not found" });
+
+    // Retrieve associated media items to clean up Cloudinary storage
+    const { data: mediaItems } = await supabase.from("media").select("*").eq("event_id", id);
+    if (mediaItems && mediaItems.length > 0) {
+      for (const mediaItem of mediaItems) {
+        if (isCloudinary && mediaItem.url.includes("cloudinary.com")) {
+          try {
+            const publicId = mediaItem.url.split("/").slice(-2).join("/").split(".")[0];
+            const resourceType = mediaItem.mime_type.startsWith("video/") ? "video" : "image";
+            await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+          } catch (err) {
+            console.warn("Could not delete file from Cloudinary:", err.message);
+          }
+        }
+      }
+    }
+
+    const { error } = await supabase.from("events").delete().eq("id", id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true, id });
+  }
+
+  const data = await readData();
+  const eventIndex = data.events.findIndex((evt) => evt.id === id);
+
+  if (eventIndex === -1) {
+    return res.status(404).json({ error: "Album not found." });
+  }
+
+  // Find all media items for the event
+  const eventMedia = data.media.filter((item) => item.eventId === id || item.event_id === id);
+  for (const mediaItem of eventMedia) {
+    if (mediaItem.url.startsWith("/uploads/")) {
+      const filePath = path.join(__dirname, mediaItem.url.replace("/uploads/", ""));
+      try {
+        await fs.unlink(filePath);
+      } catch {
+        // ignore missing files
+      }
+    }
+  }
+
+  // Filter out matching media items
+  data.media = data.media.filter((item) => item.eventId !== id && item.event_id !== id);
+  // Remove event
+  data.events.splice(eventIndex, 1);
+
+  await writeData(data);
+  res.json({ success: true, id });
+});
+
 app.get("/api/search", optionalAuth, async (req, res) => {
   const query = req.query.query?.toString().trim().toLowerCase() || "";
   const role = req.user?.role || "viewer";
