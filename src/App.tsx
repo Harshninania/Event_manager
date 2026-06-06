@@ -1813,20 +1813,48 @@ export default function App() {
           {activeView === "events" && (
             <>
               <section className="flex flex-col gap-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">Events dashboard</h2>
-                <p className="text-neutral-500">Manage event albums, uploads, privacy, and social interactions.</p>
+            {/* Sleek Gradient Hero Banner */}
+            <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-850 p-8 text-white shadow-xl">
+              {/* Subtle background abstract shapes */}
+              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+              <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none" />
+
+              <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold tracking-wide text-indigo-100 backdrop-blur-md">
+                    <Sparkles className="h-3 w-3 text-amber-300 animate-pulse" /> Live Dashboard
+                  </span>
+                  <h2 className="text-3xl font-extrabold tracking-tight md:text-4xl">Events Dashboard</h2>
+                  <p className="max-w-xl text-indigo-100 text-sm leading-relaxed">
+                    Manage your event albums, coordinate uploads, configure access levels, and explore interactive media.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {canCreateEvent && (
+                    <Button onClick={() => setShowCreateForm((value) => !value)} className="rounded-full bg-white text-indigo-900 hover:bg-indigo-50 shadow-lg hover:scale-105 active:scale-95 transition-all duration-200">
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      New event
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => fetchEvents("name")} className="rounded-full border-white/25 bg-white/10 text-white hover:bg-white/25 hover:text-white">By name</Button>
+                  <Button variant="outline" onClick={() => fetchEvents("date")} className="rounded-full border-white/25 bg-white/10 text-white hover:bg-white/25 hover:text-white">By date</Button>
+                </div>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                {canCreateEvent && (
-                  <Button onClick={() => setShowCreateForm((value) => !value)}>
-                    <Plus className="h-4 w-4" />
-                    New event
-                  </Button>
-                )}
-                <Button variant="outline" onClick={() => fetchEvents("name")}>By name</Button>
-                <Button variant="outline" onClick={() => fetchEvents("date")}>By date</Button>
+
+              {/* Glassmorphic Stats Section */}
+              <div className="relative z-10 mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-md border border-white/10 hover:bg-white/15 transition duration-300">
+                  <p className="text-indigo-200 text-xs font-semibold tracking-wider uppercase">Active Albums</p>
+                  <p className="text-2xl font-bold mt-1">{events.length}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-md border border-white/10 hover:bg-white/15 transition duration-300">
+                  <p className="text-indigo-200 text-xs font-semibold tracking-wider uppercase">Total Photos Shared</p>
+                  <p className="text-2xl font-bold mt-1">{allMedia.length}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-md border border-white/10 hover:bg-white/15 transition duration-300">
+                  <p className="text-indigo-200 text-xs font-semibold tracking-wider uppercase">Your Role</p>
+                  <p className="text-2xl font-bold mt-1 capitalize">{user.role}</p>
+                </div>
               </div>
             </div>
             {isViewer && (
