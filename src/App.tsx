@@ -20,6 +20,7 @@ import {
   Bookmark,
   Send,
   Download,
+  ScanFace,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,7 @@ import { useAuth, useUser, SignedIn, SignedOut, SignInButton, UserButton } from 
 import { createClient } from "@supabase/supabase-js";
 
 // Client-Side Face Recognition
-import { loadFaceModels, extractFaceDescriptor, compareFaces } from "./lib/face-recognition";
+import { loadFaceModels, extractFaceDescriptor, compareFaces, extractFaceDescriptors } from "./lib/face-recognition";
 
 // Firebase App and Cloud Messaging SDKs
 import { initializeApp } from "firebase/app";
@@ -527,7 +528,9 @@ export default function App() {
   const [albumPanelOpen, setAlbumPanelOpen] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [faceMatches, setFaceMatches] = useState<MediaItem[]>([]);
-  const [activeView, setActiveView] = useState<"events" | "albums" | "upload" | "discover" | "settings">("events");
+  const [referenceSelfie, setReferenceSelfie] = useState<string | null>(null);
+  const [faceScanningProgress, setFaceScanningProgress] = useState<{ current: number; total: number } | null>(null);
+  const [activeView, setActiveView] = useState<"events" | "albums" | "upload" | "discover" | "settings" | "personal">("events");
   const [allMedia, setAllMedia] = useState<MediaItem[]>([]);
   const [isLoadingAllMedia, setIsLoadingAllMedia] = useState(false);
   const [discoverMedia, setDiscoverMedia] = useState<MediaItem[]>([]);
@@ -1295,6 +1298,8 @@ export default function App() {
     }
 
     setIsFaceSearching(true);
+    setFaceMatches([]);
+    setFaceScanningProgress(null);
     setMessage("Loading Face Recognition neural network...");
 
     try {
@@ -1304,6 +1309,7 @@ export default function App() {
 
       const selfieFile = files[0];
       const selfieUrl = URL.createObjectURL(selfieFile);
+      setReferenceSelfie(selfieUrl);
       const selfieDescriptor = await extractFaceDescriptor(selfieUrl);
 
       if (!selfieDescriptor) {
@@ -1312,21 +1318,43 @@ export default function App() {
         return;
       }
 
-      setMessage("Scanning album photos. This runs fully in your browser...");
-      const currentMediaList = selectedEvent ? media : allMedia;
-      const matchedItems: MediaItem[] = [];
+      let mediaToScan = allMedia;
+      if (mediaToScan.length === 0) {
+        setMessage("Fetching all gallery photos from server...");
+        const response = await axios.get("/api/media", {
+          headers: authHeaders(),
+        });
+        const fetchedMedia = response.data.media || [];
+        setAllMedia(fetchedMedia);
+        mediaToScan = fetchedMedia;
+      }
 
-      for (const item of currentMediaList) {
-        if (!item.isImage) continue;
+      const imagesToScan = mediaToScan.filter((item) => item.isImage);
+      const total = imagesToScan.length;
+      setFaceScanningProgress({ current: 0, total });
+
+      const matchedItems: MediaItem[] = [];
+      let currentIdx = 0;
+
+      for (const item of imagesToScan) {
+        currentIdx++;
+        setFaceScanningProgress({ current: currentIdx, total });
+        setMessage(`Scanning photo ${currentIdx} of ${total}...`);
+
         try {
-          const itemDescriptor = await extractFaceDescriptor(item.url);
-          if (itemDescriptor) {
-            const distance = compareFaces(selfieDescriptor, itemDescriptor);
+          const itemDescriptors = await extractFaceDescriptors(item.url);
+          let isMatch = false;
+          for (const desc of itemDescriptors) {
+            const distance = compareFaces(selfieDescriptor, desc);
             console.log(`Euclidean distance for ${item.title}: ${distance}`);
-            // Distance < 0.6 is a positive match
-            if (distance < 0.6) {
-              matchedItems.push(item);
+            // Distance < 0.45 is a high-confidence match
+            if (distance < 0.45) {
+              isMatch = true;
+              break;
             }
+          }
+          if (isMatch) {
+            matchedItems.push(item);
           }
         } catch (err) {
           console.warn(`Could not analyze face for ${item.title}:`, err);
@@ -1335,7 +1363,7 @@ export default function App() {
 
       setFaceMatches(matchedItems);
       if (matchedItems.length === 0) {
-        setMessage("No matching photos found in this album.");
+        setMessage("No matching photos found.");
       } else {
         setMessage(`Matched ${matchedItems.length} photo(s)!`);
       }
@@ -1344,6 +1372,7 @@ export default function App() {
       setMessage("Face recognition search failed.");
     } finally {
       setIsFaceSearching(false);
+      setFaceScanningProgress(null);
     }
   };
 
@@ -1649,6 +1678,7 @@ export default function App() {
                 { label: "Albums", icon: Image, view: "albums" as const },
                 { label: "Upload", icon: Upload, view: "upload" as const },
                 { label: "Discover", icon: Compass, view: "discover" as const },
+                { label: "My Photos", icon: ScanFace, view: "personal" as const },
                 { label: "Settings", icon: Settings, view: "settings" as const },
               ].map((item) => {
                 const Icon = item.icon;
@@ -2208,6 +2238,138 @@ export default function App() {
                         ✨ You have reached the end of inspiration ✨
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeView === "personal" && (
+            <section className="space-y-8 animate-fade-in">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-3xl font-extrabold text-neutral-900 tracking-tight">My Photos</h2>
+                  <p className="text-neutral-500 text-sm">Find all uploaded photos containing your face using local facial recognition.</p>
+                </div>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-3">
+                {/* Reference Selfie Upload/Preview Card */}
+                <Card className="p-6 md:col-span-1 flex flex-col justify-between h-fit">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-neutral-805">Reference Selfie</h3>
+                    {referenceSelfie ? (
+                      <div className="relative rounded-2xl overflow-hidden aspect-square border border-neutral-200 shadow-sm bg-neutral-100 flex items-center justify-center">
+                        <img
+                          src={referenceSelfie}
+                          alt="Reference Selfie"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 aspect-square flex flex-col items-center justify-center p-6 text-center text-neutral-500">
+                        <ScanFace className="h-10 w-10 text-neutral-400 mb-3 animate-pulse" />
+                        <p className="text-xs font-medium">No reference selfie uploaded yet</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="mt-6">
+                    <label className="block w-full text-center">
+                      <span className="inline-flex w-full justify-center items-center gap-2 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white px-5 py-2.5 text-xs font-semibold shadow-sm transition-all duration-200 cursor-pointer">
+                        <Upload className="h-3.5 w-3.5" />
+                        {referenceSelfie ? "Scan New Selfie" : "Upload Selfie to Scan"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => handleFaceMatch(event.target.files)}
+                        className="hidden"
+                        disabled={isFaceSearching}
+                      />
+                    </label>
+                  </div>
+                </Card>
+
+                {/* Progress / Status Card */}
+                <Card className="p-6 md:col-span-2 h-fit flex flex-col justify-center">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-neutral-805">Scan Status</h3>
+                    
+                    {isFaceSearching ? (
+                      <div className="space-y-4 py-2">
+                        <div className="flex justify-between text-xs font-bold text-neutral-700">
+                          <span>{message || "Scanning in progress..."}</span>
+                          {faceScanningProgress && (
+                            <span>
+                              {Math.round((faceScanningProgress.current / faceScanningProgress.total) * 100)}%
+                            </span>
+                          )}
+                        </div>
+                        {faceScanningProgress && (
+                          <div className="w-full bg-neutral-200 h-3 rounded-full overflow-hidden border border-neutral-200">
+                            <div
+                              className="bg-neutral-900 h-full transition-all duration-300 rounded-full"
+                              style={{
+                                width: `${(faceScanningProgress.current / faceScanningProgress.total) * 100}%`
+                              }}
+                            />
+                          </div>
+                        )}
+                        <p className="text-neutral-500 text-xs italic">
+                          This runs entirely in your browser using Client-Side Face Recognition (face-api.js).
+                        </p>
+                      </div>
+                    ) : faceMatches.length > 0 ? (
+                      <div className="rounded-2xl border border-neutral-100 bg-neutral-50/50 p-5 space-y-2">
+                        <div className="text-neutral-800 font-bold text-lg">
+                          🎉 Found {faceMatches.length} matching photo(s)!
+                        </div>
+                        <p className="text-sm text-neutral-500">
+                          Review the matching photos below. You can view, comment, or like them directly.
+                        </p>
+                      </div>
+                    ) : referenceSelfie ? (
+                      <div className="rounded-2xl border border-neutral-100 bg-neutral-50/50 p-5 space-y-2">
+                        <div className="text-neutral-800 font-bold text-lg">
+                          🔍 No matching photos found.
+                        </div>
+                        <p className="text-sm text-neutral-500">
+                          Try uploading a clearer selfie in different lighting or upload more group photos to the events.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-neutral-100 bg-neutral-50/50 p-5 space-y-2">
+                        <div className="text-neutral-800 font-bold text-lg">
+                          👋 Ready to find your photos?
+                        </div>
+                        <p className="text-sm text-neutral-500">
+                          To get started, click the "Upload Selfie" button to upload a clear front-facing photograph of yourself.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Matched Photos Grid */}
+              {faceMatches.length > 0 && (
+                <div className="space-y-6 pt-4">
+                  <h3 className="text-xl font-bold text-neutral-850 tracking-tight">Matching Photos</h3>
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {faceMatches.map((item) => (
+                      <InstagramCard
+                        key={item.id}
+                        item={item}
+                        user={user}
+                        authHeaders={authHeaders}
+                        onLike={handleLike}
+                        onFavorite={handleFavorite}
+                        onShare={handleShare}
+                        onDelete={handleDeleteMedia}
+                        canDelete={canDeleteMedia || item.uploader === user.name}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
