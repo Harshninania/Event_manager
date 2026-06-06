@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { FormEvent } from "react";
 import axios from "axios";
 import {
@@ -492,7 +492,23 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const messaging = typeof window !== "undefined" ? getMessaging(firebaseApp) : null;
-const FCM_VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || "BGaXQJqwEAlf6Qie0mK_FmReMW0nIny93Scau7K85HHCOilovUbhcOr-ZajkmX4B8NZg-VbjcZ2zrReMA-Wh44Q";
+const DISCOVER_CATEGORIES = [
+  { name: "Animals", query: "animals", image: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&q=80&w=400" },
+  { name: "Art", query: "art", image: "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&q=80&w=400" },
+  { name: "Beauty", query: "beauty", image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=400" },
+  { name: "Design", query: "design", image: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&q=80&w=400" },
+  { name: "Diy And Crafts", query: "diy crafts", image: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?auto=format&fit=crop&q=80&w=400" },
+  { name: "Food And Drink", query: "food", image: "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&q=80&w=400" },
+  { name: "Home Decor", query: "home decor", image: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&q=80&w=400" },
+  { name: "Mens Fashion", query: "mens fashion", image: "https://images.unsplash.com/photo-1488161628813-04466f872be2?auto=format&fit=crop&q=80&w=400" },
+  { name: "Quotes", query: "quotes", image: "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=400" },
+  { name: "Tattoos", query: "tattoos", image: "https://images.unsplash.com/photo-1590246814883-57f511e76533?auto=format&fit=crop&q=80&w=400" },
+  { name: "Architecture", query: "architecture", image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=400" },
+  { name: "Travel", query: "travel", image: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&q=80&w=400" },
+  { name: "Nature", query: "nature", image: "https://images.unsplash.com/photo-1472214222541-d510753a49f8?auto=format&fit=crop&q=80&w=400" },
+  { name: "Space", query: "space", image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=400" },
+  { name: "Technology", query: "technology", image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=400" }
+];
 
 export default function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -514,6 +530,35 @@ export default function App() {
   const [activeView, setActiveView] = useState<"events" | "albums" | "upload" | "discover" | "settings">("events");
   const [allMedia, setAllMedia] = useState<MediaItem[]>([]);
   const [isLoadingAllMedia, setIsLoadingAllMedia] = useState(false);
+  const [discoverMedia, setDiscoverMedia] = useState<MediaItem[]>([]);
+  const [discoverPage, setDiscoverPage] = useState(1);
+  const [isFetchingDiscover, setIsFetchingDiscover] = useState(false);
+  const [hasMoreDiscover, setHasMoreDiscover] = useState(true);
+  const [selectedDiscoverMedia, setSelectedDiscoverMedia] = useState<MediaItem | null>(null);
+  const [discoverCommentDraft, setDiscoverCommentDraft] = useState("");
+  const [discoverCategory, setDiscoverCategory] = useState("");
+  const [showAllCategories, setShowAllCategories] = useState(false);
+
+  const isFetchingRef = useRef(isFetchingDiscover);
+  const pageRef = useRef(discoverPage);
+  const hasMoreRef = useRef(hasMoreDiscover);
+  const categoryRef = useRef(discoverCategory);
+
+  useEffect(() => {
+    isFetchingRef.current = isFetchingDiscover;
+  }, [isFetchingDiscover]);
+
+  useEffect(() => {
+    pageRef.current = discoverPage;
+  }, [discoverPage]);
+
+  useEffect(() => {
+    hasMoreRef.current = hasMoreDiscover;
+  }, [hasMoreDiscover]);
+
+  useEffect(() => {
+    categoryRef.current = discoverCategory;
+  }, [discoverCategory]);
   const [isFaceSearching, setIsFaceSearching] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [eventForm, setEventForm] = useState(defaultEventForm);
@@ -819,10 +864,128 @@ export default function App() {
     }
   };
 
+  const loadDiscoverPhotos = async (page: number, cat = categoryRef.current) => {
+    if (isFetchingRef.current || (!hasMoreRef.current && page > 1)) return;
+    isFetchingRef.current = true;
+    setIsFetchingDiscover(true);
+    try {
+      const response = await axios.get(`/api/discover/photos`, {
+        params: { page, limit: 12, category: cat },
+        headers: authHeaders(),
+      });
+      const items = response.data.photos;
+      if (!items || items.length === 0) {
+        setHasMoreDiscover(false);
+        hasMoreRef.current = false;
+        return;
+      }
+      
+      setDiscoverMedia((current) => {
+        if (page === 1) return items;
+        const existingIds = new Set(current.map(m => m.id));
+        const newItems = items.filter((m: any) => !existingIds.has(m.id));
+        return [...current, ...newItems];
+      });
+      setDiscoverPage(page);
+      pageRef.current = page;
+    } catch (err) {
+      console.error("Failed to load Unsplash photos:", err);
+    } finally {
+      setIsFetchingDiscover(false);
+      isFetchingRef.current = false;
+    }
+  };
+
+  const handleRefreshDiscover = async () => {
+    setDiscoverMedia([]);
+    setDiscoverPage(1);
+    setHasMoreDiscover(true);
+    isFetchingRef.current = false;
+    hasMoreRef.current = true;
+    pageRef.current = 1;
+    await loadDiscoverPhotos(1, categoryRef.current);
+  };
+
+  const handleCategorySelect = (catQuery: string) => {
+    const nextCat = discoverCategory === catQuery ? "" : catQuery;
+    setDiscoverCategory(nextCat);
+    setDiscoverMedia([]);
+    setDiscoverPage(1);
+    setHasMoreDiscover(true);
+    isFetchingRef.current = false;
+    hasMoreRef.current = true;
+    pageRef.current = 1;
+    loadDiscoverPhotos(1, nextCat);
+  };
+
+  const handleLikeDiscover = (item: MediaItem) => {
+    setDiscoverMedia(current =>
+      current.map(m => m.id === item.id ? { ...m, likes: m.likes + 1 } : m)
+    );
+    setSelectedDiscoverMedia(current =>
+      current && current.id === item.id ? { ...current, likes: current.likes + 1 } : current
+    );
+  };
+
+  const handleFavoriteDiscover = (item: MediaItem) => {
+    setDiscoverMedia(current =>
+      current.map(m => m.id === item.id ? { ...m, favorites: m.favorites + 1 } : m)
+    );
+    setSelectedDiscoverMedia(current =>
+      current && current.id === item.id ? { ...current, favorites: current.favorites + 1 } : current
+    );
+  };
+
+  const handleCommentDiscover = (item: MediaItem) => {
+    if (!discoverCommentDraft.trim()) return;
+    const newComment = {
+      id: `c-p-${Date.now()}`,
+      author: user.name,
+      text: discoverCommentDraft.trim(),
+      createdAt: new Date().toISOString()
+    };
+    setDiscoverMedia(current =>
+      current.map(m => m.id === item.id ? { ...m, comments: [newComment, ...(m.comments || [])] } : m)
+    );
+    setSelectedDiscoverMedia(current =>
+      current && current.id === item.id ? { ...current, comments: [newComment, ...(current.comments || [])] } : current
+    );
+    setDiscoverCommentDraft("");
+  };
+
   useEffect(() => {
     if (activeView === "albums" || activeView === "discover") {
       fetchAllMedia();
     }
+    if (activeView === "discover" && discoverMedia.length === 0) {
+      loadDiscoverPhotos(1);
+    }
+  }, [activeView]);
+
+  useEffect(() => {
+    if (activeView !== "discover") return;
+
+    let observer: IntersectionObserver | null = null;
+    const timeout = setTimeout(() => {
+      const sentinel = document.getElementById("discover-sentinel");
+      if (!sentinel) return;
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting && !isFetchingRef.current && hasMoreRef.current) {
+            loadDiscoverPhotos(pageRef.current + 1);
+          }
+        },
+        { threshold: 0.1 }
+      );
+
+      observer.observe(sentinel);
+    }, 200);
+
+    return () => {
+      clearTimeout(timeout);
+      if (observer) observer.disconnect();
+    };
   }, [activeView]);
 
   const loadMediaForEvent = async (eventId: string) => {
@@ -1899,24 +2062,79 @@ export default function App() {
           )}
 
           {activeView === "discover" && (
-            <section className="space-y-8">
+            <section className="space-y-8 animate-fade-in">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold">Discover</h2>
-                  <p className="text-neutral-500">Search results and trending media appear here.</p>
+                  <h2 className="text-3xl font-extrabold text-neutral-900 tracking-tight">Discover</h2>
+                  <p className="text-neutral-500 text-sm">Explore trending photographs and endless inspiration.</p>
                 </div>
-                <Button variant="outline" onClick={fetchAllMedia}>
-                  Refresh media
+                <Button variant="outline" onClick={searchResults ? fetchAllMedia : handleRefreshDiscover} className="rounded-full shadow-sm">
+                  {searchResults ? "Refresh results" : "Refresh gallery"}
                 </Button>
               </div>
 
-              {isLoadingAllMedia ? (
-                <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-10 text-center text-neutral-500">
-                  Loading media...
+              {/* Browse by category */}
+              {!searchResults && (
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-neutral-850 tracking-tight">Browse by category</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                    {DISCOVER_CATEGORIES.slice(0, showAllCategories ? DISCOVER_CATEGORIES.length : 10).map((cat) => {
+                      const isActive = discoverCategory === cat.query;
+                      return (
+                        <button
+                          key={cat.name}
+                          onClick={() => handleCategorySelect(cat.query)}
+                          className={`relative h-24 sm:h-28 overflow-hidden rounded-2xl group transition-all duration-300 ${
+                            isActive
+                              ? "ring-4 ring-neutral-900 ring-offset-2 scale-[0.98] shadow-lg"
+                              : "hover:scale-[1.02] hover:shadow-md"
+                          }`}
+                        >
+                          <img
+                            src={cat.image}
+                            alt={cat.name}
+                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <div className={`absolute inset-0 transition-colors duration-300 ${
+                            isActive ? "bg-black/55" : "bg-black/40 group-hover:bg-black/50"
+                          }`} />
+                          <div className="absolute inset-0 flex items-center justify-center p-2">
+                            <span className="text-white font-bold tracking-wide text-center text-sm sm:text-base drop-shadow-md">
+                              {cat.name}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => setShowAllCategories(!showAllCategories)}
+                      className="px-6 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-full text-xs font-bold tracking-wide transition-all duration-200 shadow-sm border border-neutral-200"
+                    >
+                      {showAllCategories ? "See less" : "See more"}
+                    </button>
+                  </div>
+                  
+                  {discoverCategory && (
+                    <div className="flex items-center justify-between bg-neutral-50 border border-neutral-200 rounded-2xl px-5 py-3 mt-2 animate-fade-in">
+                      <span className="text-sm text-neutral-600 font-medium">
+                        Showing results for category: <span className="font-bold text-neutral-900 capitalize">#{discoverCategory}</span>
+                      </span>
+                      <button
+                        onClick={() => handleCategorySelect(discoverCategory)}
+                        className="text-xs font-bold text-red-500 hover:text-red-700 transition-colors uppercase tracking-wider"
+                      >
+                        Clear category
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ) : (
+              )}
+
+              {searchResults ? (
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {(searchResults ? searchResults.media : allMedia).slice(0, 9).map((item) => (
+                  {searchResults.media.map((item) => (
                     <InstagramCard
                       key={item.id}
                       item={item}
@@ -1926,9 +2144,71 @@ export default function App() {
                       onFavorite={handleFavorite}
                       onShare={handleShare}
                       onDelete={handleDeleteMedia}
-                      canDelete={canDeleteMedia}
+                      canDelete={canDeleteMedia || item.uploader === user.name}
                     />
                   ))}
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6">
+                    {discoverMedia.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => setSelectedDiscoverMedia(item)}
+                        className="break-inside-avoid relative overflow-hidden rounded-3xl border border-neutral-100 bg-neutral-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer group"
+                      >
+                        <img
+                          src={item.thumbnail}
+                          alt={item.title}
+                          className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                        {/* Hover Overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-5 text-white">
+                          <p className="text-xs uppercase tracking-wider text-neutral-300 font-medium mb-1">Photographer</p>
+                          <h4 className="font-semibold text-sm leading-tight mb-2 truncate">{item.uploader}</h4>
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            {item.tags.map(tag => (
+                              <span key={tag} className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                            <div className="flex items-center gap-3">
+                              <span className="flex items-center gap-1 text-xs">
+                                <Heart className="h-3.5 w-3.5 fill-red-500 text-red-500" />
+                                {item.likes}
+                              </span>
+                              <span className="flex items-center gap-1 text-xs">
+                                <Bookmark className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                                {item.favorites}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-bold text-neutral-200">View Detail</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Infinite Scroll trigger / loading indicator */}
+                  <div id="discover-sentinel" className="flex justify-center py-8">
+                    {isFetchingDiscover && (
+                      <div className="flex items-center gap-2 text-neutral-500 text-sm font-medium bg-neutral-50 border border-neutral-200 rounded-full px-5 py-2.5 shadow-sm animate-pulse">
+                        <svg className="animate-spin h-4 w-4 text-neutral-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Discovering more photos...
+                      </div>
+                    )}
+                    {!hasMoreDiscover && (
+                      <div className="text-xs text-neutral-400 font-semibold uppercase tracking-wider bg-neutral-50 border border-neutral-100 rounded-full px-6 py-2.5">
+                        ✨ You have reached the end of inspiration ✨
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </section>
