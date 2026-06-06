@@ -1722,10 +1722,10 @@ export default function App() {
         </div>
       )}
       <div className="flex w-full">
-        <aside className="flex flex-col gap-6 w-80">
+        <aside className="flex flex-col gap-6 w-80 border-r border-neutral-200 bg-neutral-50/50 backdrop-blur-lg p-6 min-h-[calc(100vh-4rem)]">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-neutral-500 mb-3">Menu</p>
-            <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.24em] font-bold text-neutral-450 mb-4 px-1">Menu</p>
+            <div className="space-y-2.5">
               {[
                 { label: "Events", icon: Calendar, view: "events" as const },
                 { label: "Albums", icon: Image, view: "albums" as const },
@@ -1740,11 +1740,19 @@ export default function App() {
                   <button
                     key={item.label}
                     onClick={() => setActiveView(item.view)}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition ${
-                      isActive ? "bg-neutral-900 text-white" : "text-neutral-800 hover:bg-neutral-100"
+                    className={`group flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-left text-sm font-semibold transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                      isActive 
+                        ? "bg-neutral-900 text-white shadow-lg shadow-neutral-900/10 scale-[1.02] ring-1 ring-neutral-900" 
+                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/50 hover:translate-x-1"
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <div className={`rounded-xl p-1.5 transition-all duration-300 ${
+                      isActive 
+                        ? "bg-white/15 text-white" 
+                        : "bg-neutral-100 text-neutral-500 group-hover:bg-neutral-200/80 group-hover:text-neutral-800"
+                    }`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
                     {item.label}
                   </button>
                 );
@@ -1753,8 +1761,8 @@ export default function App() {
           </div>
 
 
-          <div className="rounded-3xl bg-white border border-neutral-200 p-4">
-            <p className="text-xs uppercase tracking-[0.24em] text-neutral-500 mb-3">Sign in</p>
+          <div className="rounded-[2rem] bg-white/75 border border-neutral-200 p-5 shadow-sm backdrop-blur-md">
+            <p className="text-xs uppercase tracking-[0.24em] font-bold text-neutral-450 mb-3">Sign in</p>
             {isClerkEnabled ? (
               <div className="space-y-4">
                 <SignedIn>
