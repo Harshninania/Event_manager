@@ -1576,7 +1576,7 @@ export default function App() {
                           <Send className="h-5 w-5" />
                           <span className="text-xs font-bold">{activeMedia.shares || 0}</span>
                         </button>
-                        <a href={`/api/media/${activeMedia.id}/download?watermark=true`} className="flex items-center gap-1.5 hover:text-neutral-900 transition">
+                        <a href={`/api/media/${activeMedia.id}/download?watermark=true${token ? `&token=${token}` : ""}`} className="flex items-center gap-1.5 hover:text-neutral-900 transition">
                           <Download className="h-5 w-5" />
                           <span className="text-xs font-bold">Save</span>
                         </a>
