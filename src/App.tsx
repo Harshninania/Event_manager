@@ -541,6 +541,12 @@ export default function App() {
   const [discoverCommentDraft, setDiscoverCommentDraft] = useState("");
   const [discoverCategory, setDiscoverCategory] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [eventSort, setEventSort] = useState<"date" | "name" | "category">("date");
+  const [eventFilter, setEventFilter] = useState<"all" | "public" | "private">("all");
+
+  useEffect(() => {
+    fetchEvents(eventSort);
+  }, [eventSort]);
 
   const isFetchingRef = useRef(isFetchingDiscover);
   const pageRef = useRef(discoverPage);
@@ -587,7 +593,6 @@ export default function App() {
   const clerkAuth = isClerkEnabled ? useAuth() : null;
 
   useEffect(() => {
-    fetchEvents("date");
     if (!isClerkEnabled) {
       loginAs("viewer");
     }
@@ -1419,8 +1424,14 @@ export default function App() {
   };
 
   const filteredEvents = useMemo(() => {
-    return searchResults ? searchResults.events : events;
-  }, [events, searchResults]);
+    let list = searchResults ? searchResults.events : events;
+    if (eventFilter === "public") {
+      list = list.filter((e) => e.access === "public");
+    } else if (eventFilter === "private") {
+      list = list.filter((e) => e.access === "private");
+    }
+    return list;
+  }, [events, searchResults, eventFilter]);
 
   const albumCounts = useMemo(() => {
     return allMedia.reduce<Record<string, number>>((counts, item) => {
@@ -1836,8 +1847,6 @@ export default function App() {
                       New event
                     </Button>
                   )}
-                  <Button variant="outline" onClick={() => fetchEvents("name")} className="rounded-full border-white/25 bg-white/10 text-white hover:bg-white/25 hover:text-white">By name</Button>
-                  <Button variant="outline" onClick={() => fetchEvents("date")} className="rounded-full border-white/25 bg-white/10 text-white hover:bg-white/25 hover:text-white">By date</Button>
                 </div>
               </div>
 
@@ -1920,13 +1929,55 @@ export default function App() {
             )}
           </section>
 
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
+          <section className="space-y-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-neutral-200 pb-4">
               <div>
-                <h3 className="text-xl font-semibold">Event library</h3>
+                <h3 className="text-xl font-bold tracking-tight text-neutral-900">Event Library</h3>
                 <p className="text-neutral-500 text-sm">Browse events by status and category.</p>
               </div>
-              <div className="text-sm text-neutral-500">Role: {user.role}</div>
+
+              {/* Interactive Segmented Switchers */}
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Access Filter Tab */}
+                <div className="flex rounded-full bg-neutral-100 p-1 border border-neutral-200/60 shadow-inner">
+                  {(["all", "public", "private"] as const).map((filterOpt) => {
+                    const isSel = eventFilter === filterOpt;
+                    return (
+                      <button
+                        key={filterOpt}
+                        onClick={() => setEventFilter(filterOpt)}
+                        className={`rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+                          isSel
+                            ? "bg-white text-neutral-900 shadow-sm"
+                            : "text-neutral-500 hover:text-neutral-800"
+                        }`}
+                      >
+                        {filterOpt}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Sort Control Tab */}
+                <div className="flex rounded-full bg-neutral-100 p-1 border border-neutral-200/60 shadow-inner">
+                  {(["date", "name", "category"] as const).map((sortOpt) => {
+                    const isSel = eventSort === sortOpt;
+                    return (
+                      <button
+                        key={sortOpt}
+                        onClick={() => setEventSort(sortOpt)}
+                        className={`rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+                          isSel
+                            ? "bg-white text-neutral-900 shadow-sm"
+                            : "text-neutral-500 hover:text-neutral-800"
+                        }`}
+                      >
+                        {sortOpt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
