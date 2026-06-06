@@ -1194,6 +1194,48 @@ export default function App() {
     }
   };
 
+  const handleDeleteEvent = async (eventItem: EventItem) => {
+    if (user.role !== "admin") {
+      setMessage("Only admin users can delete albums.");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete the album "${eventItem.name}" and all its photos?`)) {
+      return;
+    }
+
+    try {
+      await axios.delete(`/api/events/${eventItem.id}`, {
+        headers: authHeaders(),
+      });
+
+      setEvents((current) => current.filter((evt) => evt.id !== eventItem.id));
+      setMedia((current) => current.filter((m) => m.eventId !== eventItem.id));
+      setAllMedia((current) => current.filter((m) => m.eventId !== eventItem.id));
+
+      if (searchResults) {
+        setSearchResults((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            events: prev.events.filter((evt) => evt.id !== eventItem.id),
+            media: prev.media.filter((m) => m.eventId !== eventItem.id),
+          };
+        });
+      }
+
+      if (selectedEvent?.id === eventItem.id) {
+        setSelectedEvent(null);
+        setActiveView("events");
+      }
+
+      setMessage("Album deleted successfully.");
+    } catch {
+      setMessage("Unable to delete album.");
+    }
+  };
+
+
   const goToPreviousMedia = () => {
     if (filteredMedia.length === 0) return;
     setActiveMediaIndex((current) => (current === 0 ? filteredMedia.length - 1 : current - 1));
@@ -1879,6 +1921,18 @@ export default function App() {
                   <div className="relative h-44 overflow-hidden bg-neutral-200">
                     <img src={eventItem.thumbnail} alt={eventItem.name} className="h-full w-full object-cover" />
                     <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs text-white">{eventItem.access}</div>
+                    {user.role === "admin" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteEvent(eventItem);
+                        }}
+                        className="absolute right-3 top-3 rounded-full bg-rose-600 hover:bg-rose-700 p-2 text-white shadow-md hover:scale-105 active:scale-95 transition-all duration-200 border border-rose-500/20"
+                        title="Delete Album"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-3 p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -2073,6 +2127,18 @@ export default function App() {
                       <div className="relative h-44 overflow-hidden bg-neutral-200">
                         <img src={eventItem.thumbnail} alt={eventItem.name} className="h-full w-full object-cover" />
                         <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs text-white">{eventItem.access}</div>
+                        {user.role === "admin" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteEvent(eventItem);
+                            }}
+                            className="absolute right-3 top-3 rounded-full bg-rose-600 hover:bg-rose-700 p-2 text-white shadow-md hover:scale-105 active:scale-95 transition-all duration-200 border border-rose-500/20"
+                            title="Delete Album"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                       <div className="space-y-3 p-4">
                         <div className="flex items-start justify-between gap-3">
