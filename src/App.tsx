@@ -1981,57 +1981,89 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              {filteredEvents.map((eventItem) => (
-                <Card
-                  key={eventItem.id}
-                  className="overflow-hidden cursor-pointer transition hover:shadow-lg"
-                  onClick={() => handleSelectEvent(eventItem)}
-                >
-                  <div className="relative h-44 overflow-hidden bg-neutral-200">
-                    <img src={eventItem.thumbnail} alt={eventItem.name} className="h-full w-full object-cover" />
-                    <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs text-white">{eventItem.access}</div>
-                    {user.role === "admin" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteEvent(eventItem);
-                        }}
-                        className="absolute right-3 top-3 rounded-full bg-rose-600 hover:bg-rose-700 p-2 text-white shadow-md hover:scale-105 active:scale-95 transition-all duration-200 border border-rose-500/20"
-                        title="Delete Album"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="space-y-3 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h4 className="font-semibold">{eventItem.name}</h4>
-                        <p className="text-neutral-500 text-sm">{eventItem.date}</p>
+              {filteredEvents.map((eventItem) => {
+                const uniqueContributors = Array.from(new Set(allMedia.filter(m => m.eventId === eventItem.id).map(m => m.uploader)));
+                return (
+                  <Card
+                    key={eventItem.id}
+                    className="group overflow-hidden rounded-[2rem] border border-neutral-200 bg-white/70 backdrop-blur-md cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
+                    onClick={() => handleSelectEvent(eventItem)}
+                  >
+                    <div className="relative h-44 overflow-hidden bg-neutral-200">
+                      <img 
+                        src={eventItem.thumbnail} 
+                        alt={eventItem.name} 
+                        className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108" 
+                      />
+                      <div className="absolute left-3 top-3 rounded-full bg-neutral-900/50 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white backdrop-blur-md border border-white/10">
+                        {eventItem.access}
                       </div>
-                      <Badge variant={eventItem.access === "private" ? "secondary" : "default"}>{eventItem.category}</Badge>
+                      <div className="absolute left-3 bottom-3 rounded-full bg-black/40 backdrop-blur-md border border-white/20 px-2.5 py-0.5 text-[0.7rem] font-semibold text-white uppercase tracking-wider">
+                        {eventItem.category}
+                      </div>
+                      {user.role === "admin" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEvent(eventItem);
+                          }}
+                          className="absolute right-3 top-3 rounded-full bg-rose-600 hover:bg-rose-700 p-2 text-white shadow-md hover:scale-105 active:scale-95 transition-all duration-200 border border-rose-500/20"
+                          title="Delete Album"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
-                    <p className="text-neutral-500 text-sm line-clamp-2">{eventItem.description}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {eventItem.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className="rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-600">
-                          {tag}
-                        </span>
-                      ))}
+                    <div className="space-y-3 p-4">
+                      <div>
+                        <h4 className="font-semibold text-neutral-850 group-hover:text-indigo-600 transition-colors duration-250">{eventItem.name}</h4>
+                        <p className="text-neutral-500 text-sm mt-0.5">{eventItem.date}</p>
+                      </div>
+                      <p className="text-neutral-500 text-sm line-clamp-2 leading-relaxed">{eventItem.description}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {eventItem.tags.slice(0, 3).map((tag) => (
+                          <span key={tag} className="rounded-full bg-neutral-100 border border-neutral-200/40 px-2.5 py-0.5 text-[0.65rem] font-medium text-neutral-600">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+
+                      {uniqueContributors.length > 0 && (
+                        <div className="flex items-center gap-2 border-t border-neutral-100/80 pt-3 mt-2">
+                          <span className="text-[0.65rem] font-bold uppercase tracking-wider text-neutral-400">Contributors:</span>
+                          <div className="flex -space-x-1.5 overflow-hidden">
+                            {uniqueContributors.slice(0, 3).map((name) => (
+                              <div
+                                key={name}
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-50 to-neutral-100 text-[0.65rem] font-bold text-neutral-700 ring-2 ring-white uppercase shadow-sm border border-neutral-200/50"
+                                title={name}
+                              >
+                                {name.slice(0, 2)}
+                              </div>
+                            ))}
+                            {uniqueContributors.length > 3 && (
+                              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-800 text-[0.6rem] font-bold text-white ring-2 ring-white shadow-sm">
+                                +{uniqueContributors.length - 3}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <Button
+                        variant="outline"
+                        className="w-full mt-2 rounded-full hover:bg-neutral-50 border-neutral-200 transition-all duration-200 group-hover:border-neutral-300"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSelectEvent(eventItem);
+                        }}
+                      >
+                        View album
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleSelectEvent(eventItem);
-                      }}
-                    >
-                      View album
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           </section>
 
@@ -2191,36 +2223,73 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                  {events.map((eventItem) => (
-                    <Card key={eventItem.id} className="overflow-hidden cursor-pointer transition hover:shadow-lg" onClick={() => handleSelectEvent(eventItem)}>
-                      <div className="relative h-44 overflow-hidden bg-neutral-200">
-                        <img src={eventItem.thumbnail} alt={eventItem.name} className="h-full w-full object-cover" />
-                        <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs text-white">{eventItem.access}</div>
-                        {user.role === "admin" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteEvent(eventItem);
-                            }}
-                            className="absolute right-3 top-3 rounded-full bg-rose-600 hover:bg-rose-700 p-2 text-white shadow-md hover:scale-105 active:scale-95 transition-all duration-200 border border-rose-500/20"
-                            title="Delete Album"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="space-y-3 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h4 className="font-semibold">{eventItem.name}</h4>
-                            <p className="text-neutral-500 text-sm">{albumCounts[eventItem.id] || 0} photos</p>
+                  {events.map((eventItem) => {
+                    const uniqueContributors = Array.from(new Set(allMedia.filter(m => m.eventId === eventItem.id).map(m => m.uploader)));
+                    return (
+                      <Card 
+                        key={eventItem.id} 
+                        className="group overflow-hidden rounded-[2rem] border border-neutral-200 bg-white/70 backdrop-blur-md cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1" 
+                        onClick={() => handleSelectEvent(eventItem)}
+                      >
+                        <div className="relative h-44 overflow-hidden bg-neutral-200">
+                          <img 
+                            src={eventItem.thumbnail} 
+                            alt={eventItem.name} 
+                            className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108" 
+                          />
+                          <div className="absolute left-3 top-3 rounded-full bg-neutral-900/50 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white backdrop-blur-md border border-white/10">
+                            {eventItem.access}
                           </div>
-                          <Badge variant={eventItem.access === "private" ? "secondary" : "default"}>{eventItem.category}</Badge>
+                          <div className="absolute left-3 bottom-3 rounded-full bg-black/40 backdrop-blur-md border border-white/20 px-2.5 py-0.5 text-[0.7rem] font-semibold text-white uppercase tracking-wider">
+                            {eventItem.category}
+                          </div>
+                          {user.role === "admin" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteEvent(eventItem);
+                              }}
+                              className="absolute right-3 top-3 rounded-full bg-rose-600 hover:bg-rose-700 p-2 text-white shadow-md hover:scale-105 active:scale-95 transition-all duration-200 border border-rose-500/20"
+                              title="Delete Album"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
-                        <p className="text-neutral-500 text-sm line-clamp-2">{eventItem.description}</p>
-                      </div>
-                    </Card>
-                  ))}
+                        <div className="space-y-3 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h4 className="font-semibold text-neutral-850 group-hover:text-indigo-600 transition-colors duration-250">{eventItem.name}</h4>
+                              <p className="text-neutral-500 text-sm mt-0.5">{albumCounts[eventItem.id] || 0} photos</p>
+                            </div>
+                          </div>
+                          <p className="text-neutral-500 text-sm line-clamp-2 leading-relaxed">{eventItem.description}</p>
+                          
+                          {uniqueContributors.length > 0 && (
+                            <div className="flex items-center gap-2 border-t border-neutral-100/80 pt-3 mt-2">
+                              <span className="text-[0.65rem] font-bold uppercase tracking-wider text-neutral-400">Contributors:</span>
+                              <div className="flex -space-x-1.5 overflow-hidden">
+                                {uniqueContributors.slice(0, 3).map((name) => (
+                                  <div
+                                    key={name}
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-50 to-neutral-100 text-[0.65rem] font-bold text-neutral-700 ring-2 ring-white uppercase shadow-sm border border-neutral-200/50"
+                                    title={name}
+                                  >
+                                    {name.slice(0, 2)}
+                                  </div>
+                                ))}
+                                {uniqueContributors.length > 3 && (
+                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-800 text-[0.6rem] font-bold text-white ring-2 ring-white shadow-sm">
+                                    +{uniqueContributors.length - 3}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </section>
