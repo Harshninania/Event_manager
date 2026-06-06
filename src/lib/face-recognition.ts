@@ -49,6 +49,30 @@ export async function extractFaceDescriptor(imageSrc: string | HTMLImageElement)
   return detection.descriptor;
 }
 
+export async function extractFaceDescriptors(imageSrc: string | HTMLImageElement): Promise<Float32Array[]> {
+  await loadFaceModels();
+  
+  let imgEl: HTMLImageElement;
+  if (typeof imageSrc === 'string') {
+    imgEl = document.createElement('img');
+    imgEl.crossOrigin = 'anonymous';
+    imgEl.src = imageSrc;
+    await new Promise((resolve, reject) => {
+      imgEl.onload = resolve;
+      imgEl.onerror = () => reject(new Error(`Failed to load image from: ${imageSrc}`));
+    });
+  } else {
+    imgEl = imageSrc;
+  }
+
+  const detections = await faceapi.detectAllFaces(imgEl)
+    .withFaceLandmarks()
+    .withFaceDescriptors();
+
+  return detections.map((d) => d.descriptor);
+}
+
 export function compareFaces(descriptor1: Float32Array, descriptor2: Float32Array): number {
   return faceapi.euclideanDistance(descriptor1, descriptor2);
 }
+
