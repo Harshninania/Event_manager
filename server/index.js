@@ -190,7 +190,7 @@ const writeData = async (data) => {
 // 3. MIDDLEWARES & GENERAL FUNCTIONS
 // ----------------------------------------------------
 const optionalAuth = async (req, res, next) => {
-  const token = req.headers.authorization?.replace("Bearer ", "") || "";
+  const token = req.headers.authorization?.replace("Bearer ", "") || req.query.token || "";
   if (!token) {
     return next();
   }
@@ -228,7 +228,7 @@ const optionalAuth = async (req, res, next) => {
 };
 
 const requireAuth = async (req, res, next) => {
-  const token = req.headers.authorization?.replace("Bearer ", "") || "";
+  const token = req.headers.authorization?.replace("Bearer ", "") || req.query.token || "";
   if (!token) {
     return res.status(401).json({ error: "Authentication required." });
   }
@@ -1130,15 +1130,26 @@ app.get("/api/media/:id/download", optionalAuth, async (req, res) => {
     return res.status(404).json({ error: "Media item not found." });
   }
 
-  // Get event access
+  // Get event access, name, and club
   let isEventPrivate = false;
+  let eventName = "Event";
+  let clubName = "Snapshare Club";
+
   if (isSupabaseEnabled && supabase) {
-    const { data: evt } = await supabase.from("events").select("access").eq("id", item.eventId).single();
-    if (evt && evt.access === "private") isEventPrivate = true;
+    const { data: evt } = await supabase.from("events").select("access, name, club").eq("id", item.eventId).single();
+    if (evt) {
+      if (evt.access === "private") isEventPrivate = true;
+      eventName = evt.name;
+      clubName = evt.club || "Snapshare Club";
+    }
   } else {
     const data = await readData();
     const evt = data.events.find(e => e.id === item.eventId);
-    if (evt && evt.access === "private") isEventPrivate = true;
+    if (evt) {
+      if (evt.access === "private") isEventPrivate = true;
+      eventName = evt.name;
+      clubName = evt.club || "Snapshare Club";
+    }
   }
 
   const isPrivate = item.access === "private" || isEventPrivate;
@@ -1148,11 +1159,14 @@ app.get("/api/media/:id/download", optionalAuth, async (req, res) => {
     return res.status(403).json({ error: "Access denied." });
   }
 
+  const role = req.user?.role || "guest";
+
   if (watermark && item.isImage) {
     // If media is in Cloudinary, perform on-the-fly watermark overlays
     if (isCloudinary && item.url.includes("cloudinary.com")) {
-      // Transformation format: l_text:Arial_24_bold:{encoded_text},co_white,g_south_west,x_20,y_20
-      const textOverlay = `l_text:Arial_22_bold:${encodeURIComponent(item.uploader)},co_white,g_south_west,x_20,y_20`;
+      const rawText = `${clubName} - ${eventName} [${role.toUpperCase()}]`;
+      const escapedText = rawText.replace(/,/g, "%252C").replace(/\//g, "%252F");
+      const textOverlay = `l_text:Arial_24_bold:${encodeURIComponent(escapedText)},co_white,g_south,y_30`;
       const watermarkedUrl = item.url.replace("/upload/", `/upload/${textOverlay}/`);
       return res.redirect(watermarkedUrl);
     }
@@ -1161,11 +1175,31 @@ app.get("/api/media/:id/download", optionalAuth, async (req, res) => {
     try {
       const source = item.url.startsWith("http") ? item.url : path.join(__dirname, item.url.replace(/^\//, ""));
       const image = await Jimp.read(source);
-      const font = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE);
-      const text = `${item.uploader} · ${item.tags.slice(0, 4).join(", ")}`;
-      image.print(font, 16, image.getHeight() - 32, text);
+      
+      // Select font size dynamically based on image resolution
+      const fontSize = image.getWidth() > 1200 ? Jimp.FONT_SANS_32_WHITE : Jimp.FONT_SANS_16_WHITE;
+      const font = await Jimp.loadFont(fontSize);
+      
+      const text = `${clubName} · ${eventName} (${role.toUpperCase()})`;
+      
+      const textWidth = Jimp.measureText(font, text);
+      const textHeight = Jimp.measureTextHeight(font, text, textWidth + 32);
+      
+      const bannerHeight = textHeight + 24;
+      const bannerY = image.getHeight() - bannerHeight;
+      
+      // Draw dark semi-transparent banner
+      const banner = new Jimp(image.getWidth(), bannerHeight, 0x00000080);
+      image.composite(banner, 0, bannerY);
+      
+      // Print text centered on the banner
+      const textX = Math.max(16, Math.floor((image.getWidth() - textWidth) / 2));
+      const textY = bannerY + Math.floor((bannerHeight - textHeight) / 2);
+      image.print(font, textX, textY, text);
+      
       const buffer = await image.getBufferAsync(Jimp.MIME_JPEG);
       res.set("Content-Type", "image/jpeg");
+      res.set("Content-Disposition", `attachment; filename="watermarked_${path.basename(item.url)}"`);
       return res.send(buffer);
     } catch (error) {
       console.warn("Watermark generation failed", error);
@@ -1176,6 +1210,7 @@ app.get("/api/media/:id/download", optionalAuth, async (req, res) => {
     return res.redirect(item.url);
   }
 
+  res.set("Content-Disposition", `attachment; filename="${path.basename(item.url)}"`);
   return res.sendFile(path.join(__dirname, item.url.replace(/^\//, "")));
 });
 
