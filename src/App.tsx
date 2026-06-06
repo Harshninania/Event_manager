@@ -1741,16 +1741,6 @@ export default function App() {
             </div>
           </div>
 
-          <div className="rounded-3xl bg-white border border-neutral-200 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4 text-neutral-900" />
-              <span className="font-semibold text-sm">Go Pro</span>
-            </div>
-            <p className="text-neutral-500 text-sm leading-6">Unlimited albums, priority uploads, private cloud storage, and smart search.</p>
-            <Button className="mt-4 w-full" variant="default">
-              Upgrade
-            </Button>
-          </div>
 
           <div className="rounded-3xl bg-white border border-neutral-200 p-4">
             <p className="text-xs uppercase tracking-[0.24em] text-neutral-500 mb-3">Sign in</p>
