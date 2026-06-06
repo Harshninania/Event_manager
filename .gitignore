@@ -46,3 +46,7 @@ coverage/
 *.log
 
 server/check_db.js
+pip-install-output.txt
+replacements.txt
+server/seed.js
+supabase_schema.sql
