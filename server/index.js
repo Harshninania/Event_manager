@@ -1311,6 +1311,116 @@ app.post("/api/media/:id/favorite", requireAuth, async (req, res) => {
   res.json({ favorites: media.favorites });
 });
 
+app.get("/api/discover/photos", async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 12;
+  const category = req.query.category || "";
+
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+  const useUnsplash = accessKey && accessKey !== "YOUR_UNSPLASH_ACCESS_KEY" && accessKey.trim() !== "";
+
+  if (useUnsplash) {
+    try {
+      let url = "";
+      if (category) {
+        url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(category)}&page=${page}&per_page=${limit}`;
+      } else {
+        url = `https://api.unsplash.com/photos?page=${page}&per_page=${limit}`;
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Client-ID ${accessKey}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const results = category ? data.results : data;
+
+        if (Array.isArray(results)) {
+          const mapped = results.map((item) => {
+            const uploader = item.user?.name || item.user?.username || "Unsplash Creator";
+            const title = item.description || item.alt_description || `Photo by ${uploader}`;
+            const tags = [
+              ...(category ? [category.toLowerCase()] : []),
+              ...(item.tags ? item.tags.map(t => t.title.toLowerCase()) : ["unsplash"])
+            ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
+
+            return {
+              id: `unsplash-${item.id}`,
+              eventId: "discover",
+              title: title,
+              mimeType: "image/jpeg",
+              url: item.urls?.regular || item.urls?.full,
+              thumbnail: item.urls?.small || item.urls?.thumb,
+              access: "public",
+              uploader: uploader,
+              tags: tags,
+              likes: item.likes || Math.floor(Math.random() * 100),
+              favorites: Math.floor(Math.random() * 25),
+              shares: Math.floor(Math.random() * 15),
+              taggedUsers: [],
+              comments: [
+                { id: `c-u1-${item.id}`, author: "Alex", text: "Outstanding perspective!", createdAt: new Date().toISOString() },
+                { id: `c-u2-${item.id}`, author: "Emma", text: "Love this so much.", createdAt: new Date().toISOString() }
+              ],
+              faces: [],
+              createdAt: item.created_at || new Date().toISOString(),
+              isImage: true
+            };
+          });
+
+          return res.json({ photos: mapped });
+        }
+      }
+      console.warn(`Unsplash API responded with status ${response.status}. Falling back to Lorem Picsum.`);
+    } catch (err) {
+      console.warn("Failed to fetch from Unsplash, falling back to Lorem Picsum:", err.message);
+    }
+  }
+
+  // Fallback to Lorem Picsum
+  try {
+    const response = await fetch(`https://picsum.photos/v2/list?page=${page}&limit=${limit}`);
+    const items = await response.json();
+    const mapped = items.map((item) => {
+      const availableTags = ["nature", "travel", "city", "lifestyle", "party", "art", "streets", "people", "retro"];
+      const randTags = [
+        "picsum",
+        ...(category ? [category.toLowerCase()] : [availableTags[Math.floor(Math.random() * availableTags.length)]]),
+        availableTags[Math.floor(Math.random() * availableTags.length)]
+      ].filter((v, i, a) => a.indexOf(v) === i);
+
+      return {
+        id: `picsum-${item.id}`,
+        eventId: "discover",
+        title: `Photo by ${item.author}`,
+        mimeType: "image/jpeg",
+        url: `https://picsum.photos/id/${item.id}/800/800`,
+        thumbnail: `https://picsum.photos/id/${item.id}/400/400`,
+        access: "public",
+        uploader: item.author,
+        tags: randTags,
+        likes: Math.floor(Math.random() * 150) + 15,
+        favorites: Math.floor(Math.random() * 45) + 3,
+        shares: Math.floor(Math.random() * 20),
+        taggedUsers: [],
+        comments: [
+          { id: `c-p1-${item.id}`, author: "Alex", text: "Amazing shot!", createdAt: new Date().toISOString() },
+          { id: `c-p2-${item.id}`, author: "Sarah", text: "Love the lighting here.", createdAt: new Date().toISOString() }
+        ],
+        faces: [],
+        createdAt: new Date().toISOString(),
+        isImage: true
+      };
+    });
+    return res.json({ photos: mapped });
+  } catch (err) {
+    return res.status(500).json({ error: "Fallback Picsum fetch failed: " + err.message });
+  }
+});
+
 const port = Number(process.env.PORT || 4000);
 app.listen(port, () => {
   console.log(`Event & Media API server running on http://localhost:${port}`);
