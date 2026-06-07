@@ -184,7 +184,7 @@ VITE_FCM_VAPID_KEY=your_fcm_vapid_key
 
 ### Installation
 ```bash
-npm install
+npm install --legacy-peer-deps
 npm run setup
 ```
 
