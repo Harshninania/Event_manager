@@ -101,6 +101,15 @@ const defaultEventForm = {
   club: "Snapshare Club",
 };
 
+const CATEGORY_PRESETS: Record<string, string> = {
+  music: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800",
+  sports: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800",
+  tech: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800",
+  social: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800",
+  food: "https://images.unsplash.com/photo-1498837167922-ddd27525d352?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800",
+  art: "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800"
+};
+
 // ----------------------------------------------------
 // INSTAGRAM POST CARD COMPONENT
 // ----------------------------------------------------
@@ -511,6 +520,13 @@ const DISCOVER_CATEGORIES = [
   { name: "Technology", query: "technology", image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=400" }
 ];
 
+const getFileHash = async (file: File): Promise<string> => {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+};
+
 export default function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -573,6 +589,10 @@ export default function App() {
   const [isFaceSearching, setIsFaceSearching] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [eventForm, setEventForm] = useState(defaultEventForm);
+  const [coverSource, setCoverSource] = useState<"preset" | "url" | "upload">("preset");
+  const [customCoverUrl, setCustomCoverUrl] = useState("");
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState("");
   const [user, setUser] = useState<User>({
     id: "guest",
     name: "Visitor",
@@ -902,7 +922,9 @@ export default function App() {
       console.error("Failed to load Unsplash photos:", err);
     } finally {
       setIsFetchingDiscover(false);
-      isFetchingRef.current = false;
+      setTimeout(() => {
+        isFetchingRef.current = false;
+      }, 800);
     }
   };
 
@@ -1043,10 +1065,32 @@ export default function App() {
     }
 
     try {
-      await axios.post("/api/events", eventForm, {
-        headers: authHeaders(),
+      const formData = new FormData();
+      formData.append("name", eventForm.name);
+      formData.append("description", eventForm.description);
+      formData.append("category", eventForm.category);
+      formData.append("date", eventForm.date);
+      formData.append("access", eventForm.access);
+      formData.append("club", eventForm.club);
+
+      if (coverSource === "upload" && coverFile) {
+        formData.append("thumbnail", coverFile);
+      } else if (coverSource === "url" && customCoverUrl.trim()) {
+        formData.append("thumbnailUrl", customCoverUrl.trim());
+      }
+
+      await axios.post("/api/events", formData, {
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "multipart/form-data"
+        },
       });
+
       setEventForm(defaultEventForm);
+      setCoverSource("preset");
+      setCustomCoverUrl("");
+      setCoverFile(null);
+      setCoverPreview("");
       setShowCreateForm(false);
       fetchEvents("date");
       setMessage("Event created successfully.");
@@ -1159,15 +1203,19 @@ export default function App() {
       return;
     }
 
-    const formData = new FormData();
-    uploadFiles.forEach((file) => formData.append("mediaFiles", file));
-    formData.append("eventId", selectedEvent.id);
-    formData.append("access", selectedEvent.access === "private" ? "private" : "public");
-    formData.append("uploader", user.name);
-
     setUploadProgress(0);
     try {
-      await axios.post("/api/media/upload", formData, {
+      // Compute SHA-256 hashes of all selected files
+      const fileHashes = await Promise.all(uploadFiles.map((file) => getFileHash(file)));
+
+      const formData = new FormData();
+      uploadFiles.forEach((file) => formData.append("mediaFiles", file));
+      formData.append("eventId", selectedEvent.id);
+      formData.append("access", selectedEvent.access === "private" ? "private" : "public");
+      formData.append("uploader", user.name);
+      fileHashes.forEach((hash) => formData.append("fileHashes", hash));
+
+      const response = await axios.post("/api/media/upload", formData, {
         headers: {
           ...authHeaders(),
           "Content-Type": "multipart/form-data",
@@ -1186,7 +1234,18 @@ export default function App() {
       setPreviewUrls([]);
       setUploadWarnings(null);
       loadMediaForEvent(selectedEvent.id);
-      setMessage("Upload complete.");
+      
+      let msg = "Upload complete.";
+      const skipped = response.data.skippedDuplicates || [];
+      const created = response.data.createdMedia || [];
+      if (skipped.length > 0) {
+        if (created.length === 0) {
+          msg = `No new files uploaded. ${skipped.length} duplicate file(s) skipped.`;
+        } else {
+          msg = `Upload complete. ${created.length} new file(s) uploaded, ${skipped.length} duplicate(s) skipped.`;
+        }
+      }
+      setMessage(msg);
     } catch {
       setUploadProgress(null);
       setMessage("Upload failed.");
@@ -1971,6 +2030,100 @@ export default function App() {
                     value={eventForm.description}
                     onChange={(event) => setEventForm({ ...eventForm, description: event.target.value })}
                   />
+                  <div className="space-y-3 pt-2">
+                    <label className="block text-sm font-semibold text-neutral-800">
+                      Album Cover Image
+                    </label>
+                    <div className="flex gap-2 rounded-xl bg-neutral-100 p-1 border border-neutral-200/50 max-w-md">
+                      {(["preset", "url", "upload"] as const).map((source) => (
+                        <button
+                          key={source}
+                          type="button"
+                          onClick={() => setCoverSource(source)}
+                          className={`flex-1 rounded-lg py-1.5 text-xs font-semibold capitalize transition ${
+                            coverSource === source
+                              ? "bg-white text-indigo-600 shadow-sm"
+                              : "text-neutral-500 hover:text-neutral-900"
+                          }`}
+                        >
+                          {source === "preset" ? "Category Preset" : source === "url" ? "Custom URL" : "Upload File"}
+                        </button>
+                      ))}
+                    </div>
+
+                    {coverSource === "preset" && (
+                      <div className="relative mt-2 overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 max-w-sm aspect-video shadow-sm">
+                        <img
+                          src={CATEGORY_PRESETS[eventForm.category.toLowerCase()] || CATEGORY_PRESETS.music}
+                          alt="Preset cover preview"
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute bottom-2 left-2 rounded-lg bg-black/40 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+                          Preset for {eventForm.category}
+                        </div>
+                      </div>
+                    )}
+
+                    {coverSource === "url" && (
+                      <div className="space-y-2 max-w-md mt-2">
+                        <Input
+                          placeholder="https://images.unsplash.com/... or any image link"
+                          value={customCoverUrl}
+                          onChange={(e) => setCustomCoverUrl(e.target.value)}
+                          className="text-xs"
+                        />
+                        {customCoverUrl.trim() && (
+                          <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 max-w-sm aspect-video shadow-sm">
+                            <img
+                              src={customCoverUrl}
+                              alt="Custom URL cover preview"
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&q=80&w=800";
+                              }}
+                            />
+                            <div className="absolute bottom-2 left-2 rounded-lg bg-black/40 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+                              URL Preview
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {coverSource === "upload" && (
+                      <div className="space-y-2 max-w-md mt-2">
+                        <div className="relative flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-2xl p-4 hover:bg-neutral-50 transition cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setCoverFile(file);
+                                setCoverPreview(URL.createObjectURL(file));
+                              }
+                            }}
+                          />
+                          <div className="flex flex-col items-center gap-1.5 text-neutral-500">
+                            <Upload className="h-6 w-6 text-neutral-400" />
+                            <p className="text-xs font-medium text-neutral-700">
+                              {coverFile ? coverFile.name : "Click or drag to choose cover image"}
+                            </p>
+                            <p className="text-[10px] text-neutral-400">PNG, JPG, or WEBP up to 5MB</p>
+                          </div>
+                        </div>
+                        {coverPreview && (
+                          <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 max-w-sm aspect-video shadow-sm">
+                            <img src={coverPreview} alt="Uploaded file preview" className="h-full w-full object-cover" />
+                            <div className="absolute bottom-2 left-2 rounded-lg bg-black/40 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+                              File Preview
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3">
                     <Button type="submit">Create event</Button>
                     <Button type="button" variant="ghost" onClick={() => setShowCreateForm(false)}>
@@ -2469,7 +2622,7 @@ export default function App() {
                       <div
                         key={item.id}
                         onClick={() => setSelectedDiscoverMedia(item)}
-                        className="break-inside-avoid relative overflow-hidden rounded-3xl border border-neutral-100 bg-neutral-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer group"
+                        className="break-inside-avoid relative overflow-hidden rounded-3xl border border-neutral-100 bg-neutral-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer group min-h-[280px]"
                       >
                         <img
                           src={item.thumbnail}
