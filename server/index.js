@@ -28,6 +28,7 @@ app.use(cors({ origin: "http://localhost:5173" }));
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(express.static(path.join(__dirname, "../dist")));
 
 const dataPath = path.join(__dirname, "data.json");
 const uploadPath = path.join(__dirname, "uploads");
@@ -1666,6 +1667,14 @@ app.get("/api/discover/photos", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: "Fallback Picsum fetch failed: " + err.message });
   }
+});
+
+// Catch-all route to serve the React SPA index.html for non-API requests
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 
 const port = Number(process.env.PORT || 4000);
