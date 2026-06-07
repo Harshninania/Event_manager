@@ -500,6 +500,8 @@ const firebaseConfig = {
   measurementId: "G-Q94THGHNEH"
 };
 
+const FCM_VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || "BGaXQJqwEAlf6Qie0mK_FmReMW0nIny93Scau7K85HHCOilovUbhcOr-ZajkmX4B8NZg-VbjcZ2zrReMA-Wh44Q";
+
 const firebaseApp = initializeApp(firebaseConfig);
 const messaging = typeof window !== "undefined" ? getMessaging(firebaseApp) : null;
 const DISCOVER_CATEGORIES = [
@@ -553,8 +555,6 @@ export default function App() {
   const [discoverPage, setDiscoverPage] = useState(1);
   const [isFetchingDiscover, setIsFetchingDiscover] = useState(false);
   const [hasMoreDiscover, setHasMoreDiscover] = useState(true);
-  const [selectedDiscoverMedia, setSelectedDiscoverMedia] = useState<MediaItem | null>(null);
-  const [discoverCommentDraft, setDiscoverCommentDraft] = useState("");
   const [discoverCategory, setDiscoverCategory] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [eventSort, setEventSort] = useState<"date" | "name" | "category">("date");
@@ -948,41 +948,6 @@ export default function App() {
     hasMoreRef.current = true;
     pageRef.current = 1;
     loadDiscoverPhotos(1, nextCat);
-  };
-
-  const handleLikeDiscover = (item: MediaItem) => {
-    setDiscoverMedia(current =>
-      current.map(m => m.id === item.id ? { ...m, likes: m.likes + 1 } : m)
-    );
-    setSelectedDiscoverMedia(current =>
-      current && current.id === item.id ? { ...current, likes: current.likes + 1 } : current
-    );
-  };
-
-  const handleFavoriteDiscover = (item: MediaItem) => {
-    setDiscoverMedia(current =>
-      current.map(m => m.id === item.id ? { ...m, favorites: m.favorites + 1 } : m)
-    );
-    setSelectedDiscoverMedia(current =>
-      current && current.id === item.id ? { ...current, favorites: current.favorites + 1 } : current
-    );
-  };
-
-  const handleCommentDiscover = (item: MediaItem) => {
-    if (!discoverCommentDraft.trim()) return;
-    const newComment = {
-      id: `c-p-${Date.now()}`,
-      author: user.name,
-      text: discoverCommentDraft.trim(),
-      createdAt: new Date().toISOString()
-    };
-    setDiscoverMedia(current =>
-      current.map(m => m.id === item.id ? { ...m, comments: [newComment, ...(m.comments || [])] } : m)
-    );
-    setSelectedDiscoverMedia(current =>
-      current && current.id === item.id ? { ...current, comments: [newComment, ...(current.comments || [])] } : current
-    );
-    setDiscoverCommentDraft("");
   };
 
   useEffect(() => {
@@ -2621,8 +2586,7 @@ export default function App() {
                     {discoverMedia.map((item) => (
                       <div
                         key={item.id}
-                        onClick={() => setSelectedDiscoverMedia(item)}
-                        className="break-inside-avoid relative overflow-hidden rounded-3xl border border-neutral-100 bg-neutral-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer group min-h-[280px]"
+                        className="break-inside-avoid relative overflow-hidden rounded-3xl border border-neutral-100 bg-neutral-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-default group min-h-[280px]"
                       >
                         <img
                           src={item.thumbnail}
