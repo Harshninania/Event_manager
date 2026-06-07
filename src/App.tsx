@@ -544,6 +544,7 @@ export default function App() {
   const [eventSort, setEventSort] = useState<"date" | "name" | "category">("date");
   const [eventFilter, setEventFilter] = useState<"all" | "public" | "private">("all");
   const [isAutoTagging, setIsAutoTagging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   useEffect(() => {
     fetchEvents(eventSort);
@@ -1164,19 +1165,30 @@ export default function App() {
     formData.append("access", selectedEvent.access === "private" ? "private" : "public");
     formData.append("uploader", user.name);
 
+    setUploadProgress(0);
     try {
       await axios.post("/api/media/upload", formData, {
         headers: {
           ...authHeaders(),
           "Content-Type": "multipart/form-data",
         },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(percentCompleted);
+          }
+        },
       });
+      setUploadProgress(100);
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      setUploadProgress(null);
       setUploadFiles([]);
       setPreviewUrls([]);
       setUploadWarnings(null);
       loadMediaForEvent(selectedEvent.id);
       setMessage("Upload complete.");
     } catch {
+      setUploadProgress(null);
       setMessage("Upload failed.");
     }
   };
@@ -2157,15 +2169,19 @@ export default function App() {
                 </div>
                 <div className="space-y-4">
                   <label
-                    className={`block rounded-3xl border border-dashed p-6 text-center text-sm transition ${dragActive ? "border-blue-500 bg-blue-50 text-blue-900" : "border-neutral-300 bg-neutral-100 text-neutral-600"}`}
-                    onDragEnter={handleDragEnter}
-                    onDragOver={handleDragEnter}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
+                    className={`block rounded-3xl border border-dashed p-6 text-center text-sm transition ${uploadProgress !== null ? "opacity-50 cursor-not-allowed pointer-events-none" : "cursor-pointer"} ${dragActive ? "border-blue-500 bg-blue-50 text-blue-900" : "border-neutral-300 bg-neutral-100 text-neutral-600"}`}
+                    onDragEnter={uploadProgress !== null ? undefined : handleDragEnter}
+                    onDragOver={uploadProgress !== null ? undefined : handleDragEnter}
+                    onDragLeave={uploadProgress !== null ? undefined : handleDragLeave}
+                    onDrop={uploadProgress !== null ? undefined : handleDrop}
                   >
-                    <div className="mb-3 text-neutral-500">Choose files to upload</div>
-                    <div className="text-xs text-neutral-500">You can drag and drop photos or videos, or click to browse.</div>
-                    <input type="file" multiple onChange={(event) => handleFilesChange(event.target.files)} className="hidden" />
+                    <div className="mb-3 text-neutral-500">
+                      {uploadProgress !== null ? "Uploading in progress..." : "Choose files to upload"}
+                    </div>
+                    <div className="text-xs text-neutral-500">
+                      {uploadProgress !== null ? "Please wait while the transfer finishes." : "You can drag and drop photos or videos, or click to browse."}
+                    </div>
+                    <input type="file" multiple disabled={uploadProgress !== null} onChange={(event) => handleFilesChange(event.target.files)} className="hidden" />
                   </label>
 
                   {uploadWarnings && (
@@ -2190,8 +2206,31 @@ export default function App() {
                     </div>
                   )}
 
-                  <Button disabled={!selectedEvent || uploadFiles.length === 0} onClick={handleUpload}>
-                    Upload files
+                  {uploadProgress !== null && (
+                    <div className="mt-4 space-y-2.5 rounded-3xl bg-neutral-50 border border-neutral-200/50 p-4 animate-fade-in shadow-inner">
+                      <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
+                        <span className="flex items-center gap-2">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                          </span>
+                          Uploading {uploadFiles.length} file(s)...
+                        </span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-neutral-200 h-3 rounded-full overflow-hidden border border-neutral-200 relative">
+                        <div
+                          className="bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-850 h-full transition-all duration-300 ease-out rounded-full relative overflow-hidden"
+                          style={{ width: `${uploadProgress}%` }}
+                        >
+                          <div className="absolute inset-0 animate-shimmer" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button disabled={!selectedEvent || uploadFiles.length === 0 || uploadProgress !== null} onClick={handleUpload}>
+                    {uploadProgress !== null ? "Uploading..." : "Upload files"}
                   </Button>
                 </div>
               </Card>
@@ -2671,15 +2710,19 @@ export default function App() {
                     </div>
                     <div className="space-y-4">
                       <label
-                        className={`block rounded-3xl border border-dashed p-6 text-center text-sm transition ${dragActive ? "border-blue-500 bg-blue-50 text-blue-900" : "border-neutral-300 bg-neutral-100 text-neutral-600"}`}
-                        onDragEnter={handleDragEnter}
-                        onDragOver={handleDragEnter}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
+                        className={`block rounded-3xl border border-dashed p-6 text-center text-sm transition ${uploadProgress !== null ? "opacity-50 cursor-not-allowed pointer-events-none" : "cursor-pointer"} ${dragActive ? "border-blue-500 bg-blue-50 text-blue-900" : "border-neutral-300 bg-neutral-100 text-neutral-600"}`}
+                        onDragEnter={uploadProgress !== null ? undefined : handleDragEnter}
+                        onDragOver={uploadProgress !== null ? undefined : handleDragEnter}
+                        onDragLeave={uploadProgress !== null ? undefined : handleDragLeave}
+                        onDrop={uploadProgress !== null ? undefined : handleDrop}
                       >
-                        <div className="mb-3 text-neutral-500">Choose files to upload</div>
-                        <div className="text-xs text-neutral-500">You can drag and drop photos or videos, or click to browse.</div>
-                        <input type="file" multiple onChange={(event) => handleFilesChange(event.target.files)} className="hidden" />
+                        <div className="mb-3 text-neutral-500">
+                          {uploadProgress !== null ? "Uploading in progress..." : "Choose files to upload"}
+                        </div>
+                        <div className="text-xs text-neutral-500">
+                          {uploadProgress !== null ? "Please wait while the transfer finishes." : "You can drag and drop photos or videos, or click to browse."}
+                        </div>
+                        <input type="file" multiple disabled={uploadProgress !== null} onChange={(event) => handleFilesChange(event.target.files)} className="hidden" />
                       </label>
 
                       {uploadWarnings && (
@@ -2704,8 +2747,31 @@ export default function App() {
                         </div>
                       )}
 
-                      <Button disabled={!selectedEvent || uploadFiles.length === 0} onClick={handleUpload}>
-                        Upload files
+                      {uploadProgress !== null && (
+                        <div className="mt-4 space-y-2.5 rounded-3xl bg-neutral-50 border border-neutral-200/50 p-4 animate-fade-in shadow-inner">
+                          <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
+                            <span className="flex items-center gap-2">
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                              </span>
+                              Uploading {uploadFiles.length} file(s)...
+                            </span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-neutral-200 h-3 rounded-full overflow-hidden border border-neutral-200 relative">
+                            <div
+                              className="bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-850 h-full transition-all duration-300 ease-out rounded-full relative overflow-hidden"
+                              style={{ width: `${uploadProgress}%` }}
+                            >
+                              <div className="absolute inset-0 animate-shimmer" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <Button disabled={!selectedEvent || uploadFiles.length === 0 || uploadProgress !== null} onClick={handleUpload}>
+                        {uploadProgress !== null ? "Uploading..." : "Upload files"}
                       </Button>
                     </div>
                   </Card>
