@@ -7,6 +7,7 @@
     "setup": "npx shadcn@latest add avatar badge button card input",
     "dev": "vite",
     "server": "node server/index.js",
+    "start": "node server/index.js",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
