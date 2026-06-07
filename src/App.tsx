@@ -543,6 +543,7 @@ export default function App() {
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [eventSort, setEventSort] = useState<"date" | "name" | "category">("date");
   const [eventFilter, setEventFilter] = useState<"all" | "public" | "private">("all");
+  const [isAutoTagging, setIsAutoTagging] = useState(false);
 
   useEffect(() => {
     fetchEvents(eventSort);
@@ -1339,6 +1340,25 @@ export default function App() {
     }
   };
 
+  const handleAutoTag = async (item: MediaItem) => {
+    setIsAutoTagging(true);
+    try {
+      const response = await axios.post(`/api/media/${item.id}/autotag`, null, {
+        headers: authHeaders(),
+      });
+      const newTags = response.data.tags;
+
+      setMedia((current) => current.map((mediaItem) => (mediaItem.id === item.id ? { ...mediaItem, tags: newTags } : mediaItem)));
+      setAllMedia((current) => current.map((mediaItem) => (mediaItem.id === item.id ? { ...mediaItem, tags: newTags } : mediaItem)));
+
+      setMessage("AI tags generated successfully.");
+    } catch {
+      setMessage("Unable to generate AI tags.");
+    } finally {
+      setIsAutoTagging(false);
+    }
+  };
+
   const handleFaceMatch = async (files: FileList | null) => {
     if (!files?.length) {
       return;
@@ -1606,13 +1626,26 @@ export default function App() {
                         <Badge variant={activeMedia.access === "private" ? "secondary" : "default"}>{activeMedia.access}</Badge>
                       </div>
 
-                      {/* Badges */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {activeMedia.tags.map((tag) => (
-                          <span key={tag} className="text-xs font-medium text-blue-600">
-                            #{tag.toLowerCase()}
-                          </span>
-                        ))}
+                      {/* Badges and Auto-Tag Option */}
+                      <div className="space-y-2.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {activeMedia.tags.map((tag) => (
+                            <span key={tag} className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 uppercase tracking-wide">
+                              #{tag.toLowerCase()}
+                            </span>
+                          ))}
+                        </div>
+                        {canDeleteMedia && (
+                          <Button
+                            variant="outline"
+                            onClick={() => handleAutoTag(activeMedia)}
+                            disabled={isAutoTagging}
+                            className="rounded-full text-xs font-bold text-indigo-750 border-indigo-200 bg-indigo-50/30 hover:bg-indigo-50 hover:text-indigo-850 hover:border-indigo-300 transition-all duration-200 px-3.5 py-1.5 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Sparkles className={`h-3.5 w-3.5 ${isAutoTagging ? "animate-spin text-indigo-500" : "text-amber-500 animate-pulse"}`} />
+                            {isAutoTagging ? "Generating Tags..." : "Auto-Tag with AI"}
+                          </Button>
+                        )}
                       </div>
 
                       {/* Icons Action Row */}
