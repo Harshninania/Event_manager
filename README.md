@@ -202,6 +202,8 @@ npm run dev:all
 
 The application is configured to run as a single unified service. The Express backend serves the compiled React static assets directly.
 
+When running in production (using Cloudinary and Supabase), the application automatically uses browser-side face recognition (via `face-api.js`), meaning **Python is not required in production environments** (avoiding memory-intensive compilations on PaaS hosts like Render).
+
 ### Steps to Build and Run in Production:
 1. **Compile Production Frontend Assets**:
    ```bash
