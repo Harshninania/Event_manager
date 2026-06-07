@@ -50,3 +50,4 @@ pip-install-output.txt
 replacements.txt
 server/seed.js
 supabase_schema.sql
+server/list_models.js
