@@ -284,8 +284,23 @@ const generateTags = (name, category) => {
   };
 
   const tags = new Set([category.toLowerCase(), ...((categoryTags[category.toLowerCase()] || []))]);
-  if (normalized.includes("crowd")) tags.add("crowd");
-  if (normalized.includes("nature")) tags.add("nature");
+  if (normalized.includes("crowd") || normalized.includes("gathering") || normalized.includes("people")) {
+    tags.add("crowd");
+  }
+  if (normalized.includes("mountain") || normalized.includes("mountains") || normalized.includes("hill")) {
+    tags.add("mountains");
+    tags.add("nature");
+  }
+  if (normalized.includes("beach") || normalized.includes("beaches") || normalized.includes("sea") || normalized.includes("ocean") || normalized.includes("sand")) {
+    tags.add("beaches");
+    tags.add("nature");
+  }
+  if (normalized.includes("sport") || normalized.includes("sports") || normalized.includes("athlete") || normalized.includes("game")) {
+    tags.add("sports");
+  }
+  if (normalized.includes("nature") || normalized.includes("sky") || normalized.includes("tree")) {
+    tags.add("nature");
+  }
   if (normalized.includes("selfie")) tags.add("portrait");
   if (normalized.includes("party")) tags.add("nightlife");
   if (normalized.includes("wedding")) tags.add("romance");
@@ -1155,6 +1170,54 @@ app.post("/api/media/:id/tag", requireAuth, async (req, res) => {
   }
 
   res.json({ taggedUsers: media.taggedUsers });
+});
+
+app.post("/api/media/:id/autotag", requireRole(["admin", "photographer"]), async (req, res) => {
+  const { id } = req.params;
+
+  let mediaItem = null;
+  if (isSupabaseEnabled && supabase) {
+    const { data: item } = await supabase.from("media").select("*").eq("id", id).single();
+    mediaItem = item;
+  } else {
+    const data = await readData();
+    mediaItem = data.media.find((m) => m.id === id);
+  }
+
+  if (!mediaItem) {
+    return res.status(404).json({ error: "Media not found." });
+  }
+
+  // Get associated event to know the category
+  let eventCategory = "General";
+  const eventId = mediaItem.event_id || mediaItem.eventId;
+  if (eventId) {
+    if (isSupabaseEnabled && supabase) {
+      const { data: evt } = await supabase.from("events").select("category").eq("id", eventId).single();
+      if (evt) eventCategory = evt.category;
+    } else {
+      const data = await readData();
+      const evt = data.events.find((e) => e.id === eventId);
+      if (evt) eventCategory = evt.category;
+    }
+  }
+
+  // Run AI / Fallback Tagging
+  const newTags = await getAITags(mediaItem.url, mediaItem.title || "", eventCategory);
+
+  if (isSupabaseEnabled && supabase) {
+    const { error } = await supabase.from("media").update({ tags: newTags }).eq("id", id);
+    if (error) return res.status(500).json({ error: error.message });
+  } else {
+    const data = await readData();
+    const idx = data.media.findIndex((m) => m.id === id);
+    if (idx !== -1) {
+      data.media[idx].tags = newTags;
+      await writeData(data);
+    }
+  }
+
+  res.json({ success: true, tags: newTags });
 });
 
 app.get("/api/media/:id/download", optionalAuth, async (req, res) => {
