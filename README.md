@@ -214,4 +214,4 @@ When running in production (using Cloudinary and Supabase), the application auto
    ```bash
    npm start
    ```
-3. Access the complete full-stack application at `http://localhost:4000`.
+3. Access the complete full-stack application at `https://event-manager-46hh.onrender.com/`.
